@@ -27,6 +27,7 @@ SIGNUP_CODE = os.environ.get("SIGNUP_CODE", APP_PASSWORD)
 SECRET_KEY = os.environ.get("SECRET_KEY", "")
 POKEMON_API_KEY = os.environ.get("POKEMONTCG_API_KEY", "")
 REFRESH_HOUR = int(os.environ.get("REFRESH_HOUR", "6"))  # heure locale du relevé quotidien
+BACKUP_KEEP = int(os.environ.get("BACKUP_KEEP", "14"))  # nombre de sauvegardes quotidiennes de la base gardées
 HTTP_TIMEOUT = 25
 # Reconnaissance des cartes par l'IA (facultatif) : sans clé, l'appli garde la lecture de texte sur le téléphone
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -890,9 +891,35 @@ def refresh_guarded():
         _refresh_lock.release()
 
 
+def backup_db(today=None):
+    """Copie du jour de la base dans data/backups/ (cohérente même si l'appli écrit en même temps).
+    On garde les BACKUP_KEEP plus récentes. Les photos, simples fichiers, restent dans data/photos/."""
+    today = today or date.today().isoformat()
+    folder = os.path.join(DATA_DIR, "backups")
+    os.makedirs(folder, exist_ok=True)
+    target = os.path.join(folder, f"cartes-{today}.db")
+    if os.path.exists(target):
+        return None
+    src, dst = sqlite3.connect(DB_PATH), sqlite3.connect(target + ".tmp")
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+    os.replace(target + ".tmp", target)
+    old = sorted(f for f in os.listdir(folder) if f.startswith("cartes-") and f.endswith(".db"))
+    for f in old[:-BACKUP_KEEP] if BACKUP_KEEP > 0 else []:
+        os.remove(os.path.join(folder, f))
+    return target
+
+
 def scheduler_loop():
-    """Une fois par jour, après REFRESH_HOUR, si le relevé du jour n'est pas fait."""
+    """Une fois par jour, après REFRESH_HOUR, si le relevé du jour n'est pas fait ; et une sauvegarde par jour."""
     while True:
+        try:
+            backup_db()
+        except Exception as exc:
+            app.logger.warning("sauvegarde: %s", exc)
         try:
             now = datetime.now()
             db = standalone_db()

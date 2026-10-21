@@ -1,0 +1,27 @@
+# Sleevr sur Docker Desktop (ton PC), partagé sur Internet par un tunnel Cloudflare.
+# Pas de port à ouvrir sur la box, HTTPS fourni par Cloudflare. Guide : docs/partage-docker-desktop.md
+#   docker compose -f docker-compose.tunnel.yml up -d --build
+services:
+  sleevr:
+    build: .
+    restart: unless-stopped
+    environment:
+      SIGNUP_CODE: ${SIGNUP_CODE:?définis SIGNUP_CODE dans le fichier .env (code d'invitation)}
+      SECRET_KEY: ${SECRET_KEY:?définis SECRET_KEY dans le fichier .env}
+      POKEMONTCG_API_KEY: ${POKEMONTCG_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      REFRESH_HOUR: ${REFRESH_HOUR:-6}
+      TZ: Europe/Paris
+    volumes:
+      - ./data:/data          # collection, photos et sauvegardes : sur ton disque, à côté de ce fichier
+    ports:
+      - "8000:8000"           # accès direct depuis ton PC ou ton Wi-Fi : http://localhost:8000
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?colle le jeton du tunnel Cloudflare dans le fichier .env}
+    depends_on:
+      - sleevr

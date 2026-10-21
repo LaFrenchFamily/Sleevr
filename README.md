@@ -28,7 +28,11 @@ docker compose up -d --build
 ```
 
 Ouvre `https://ton-domaine` sur le téléphone, puis « Ajouter à l'écran d'accueil ».
-Les données sont dans le dossier `data/` (une seule base `cartes.db`) : sauvegarde ce dossier.
+Les données sont dans le dossier `data/` (une seule base `cartes.db`, les photos, et une sauvegarde quotidienne de la base dans `data/backups/`, les 14 dernières) : copie aussi ce dossier ailleurs de temps en temps.
+
+## Option C — Sur ton PC avec Docker Desktop, partagé sur Internet
+
+Docker Desktop + un tunnel Cloudflare : tes amis accèdent à l'appli en HTTPS sans que tu ouvres de port sur ta box. Le PC doit rester allumé. Guide pas à pas : [docs/partage-docker-desktop.md](docs/partage-docker-desktop.md), puis double-clic sur `partager.bat`.
 
 ## Comptes et collectionneurs
 

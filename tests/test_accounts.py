@@ -84,3 +84,17 @@ def test_old_database_goes_to_first_account(tmp_path, monkeypatch):
     signup(second, "sam")
     assert first.get("/api/collection").get_json()["items"][0]["quantity"] == 3
     assert second.get("/api/collection").get_json()["items"] == []
+
+
+def test_daily_backup_keeps_the_latest(tmp_path, monkeypatch):
+    monkeypatch.setattr(sleevr, "DB_PATH", str(tmp_path / "cartes.db"))
+    monkeypatch.setattr(sleevr, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(sleevr, "BACKUP_KEEP", 2)
+    sleevr.init_db()
+    for day in ("2026-10-01", "2026-10-02", "2026-10-03"):
+        assert sleevr.backup_db(day)
+    assert sleevr.backup_db("2026-10-03") is None  # déjà faite aujourd'hui
+    kept = sorted(p.name for p in (tmp_path / "backups").iterdir())
+    assert kept == ["cartes-2026-10-02.db", "cartes-2026-10-03.db"]
+    db = sqlite3.connect(tmp_path / "backups" / "cartes-2026-10-03.db")
+    assert db.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='users'").fetchone()[0] == 1
