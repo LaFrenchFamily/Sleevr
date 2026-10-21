@@ -28,6 +28,9 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "")
 POKEMON_API_KEY = os.environ.get("POKEMONTCG_API_KEY", "")
 REFRESH_HOUR = int(os.environ.get("REFRESH_HOUR", "6"))  # heure locale du relevé quotidien
 HTTP_TIMEOUT = 25
+# Reconnaissance des cartes par l'IA (facultatif) : sans clé, l'appli garde la lecture de texte sur le téléphone
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+CARD_AI_MODEL = os.environ.get("CARD_AI_MODEL", "claude-opus-5-5")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -220,7 +223,8 @@ def logout():
 def session_state():
     u = current_user()
     has_users = get_db().execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
-    return jsonify(ok=bool(u), user=user_json(u) if u else None, signup_code=bool(SIGNUP_CODE), has_users=has_users)
+    return jsonify(ok=bool(u), user=user_json(u) if u else None, signup_code=bool(SIGNUP_CODE), has_users=has_users,
+                   ai=bool(ANTHROPIC_API_KEY))
 
 
 @app.patch("/api/me")
@@ -1177,6 +1181,96 @@ def manual_refresh():
     if res is None:
         return jsonify(error="un relevé est déjà en cours"), 409
     return jsonify(ok=res[0], errors=res[1])
+
+
+# ----------------------------------------------------------------- reconnaissance par l'IA
+IDENTIFY_PROMPT = """Cette photo montre une carte à collectionner (Pokémon, Yu-Gi-Oh!, Magic: The Gathering ou One Piece Card Game).
+Identifie-la pour qu'on puisse la retrouver dans une base de données.
+
+- game : "pokemon", "yugioh", "magic", "onepiece", ou "unknown" si ce n'est pas une carte de ces jeux.
+- name : le nom de la carte tel qu'il est imprimé (dans la langue de la carte), sans PV, niveau ni symbole.
+- number : l'identifiant imprimé, au format attendu par le jeu, ou "" s'il est illisible :
+  Pokémon « 58/102 » (numéro/total, en bas de la carte) ;
+  Yu-Gi-Oh! le code d'extension sous l'illustration, ex. « LOB-FR005 » ;
+  Magic le code d'extension puis le numéro de collection, en bas à gauche, ex. « MKM 123 » ;
+  One Piece le code en bas à droite, ex. « OP01-001 » ou « ST10-005 ».
+- confidence : "high" si nom et numéro sont nettement lisibles, "medium" si l'un des deux est deviné, "low" sinon.
+
+Ne devine pas un numéro que tu ne lis pas : laisse-le vide, la recherche par nom prendra le relais."""
+
+IDENTIFY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "game": {"type": "string", "enum": ["pokemon", "yugioh", "magic", "onepiece", "unknown"]},
+        "name": {"type": "string"},
+        "number": {"type": "string"},
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+    },
+    "required": ["game", "name", "number", "confidence"],
+    "additionalProperties": False,
+}
+
+_ai_client = None
+
+
+def ai_client():
+    global _ai_client
+    if _ai_client is None:
+        import anthropic  # importé seulement si la reconnaissance par l'IA est activée
+
+        _ai_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=60.0)
+    return _ai_client
+
+
+def identify_card(jpeg):
+    """Photo (JPEG) -> {game, name, number, confidence} lus par Claude. Lève SourceError en cas d'échec."""
+    import base64
+
+    import anthropic
+
+    try:
+        resp = ai_client().beta.messages.create(
+            model=CARD_AI_MODEL,
+            max_tokens=4000,
+            # si le modèle décline la requête, l'API la relance sur le modèle de repli recommandé
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": IDENTIFY_SCHEMA}},
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                             "data": base64.standard_b64encode(jpeg).decode()}},
+                {"type": "text", "text": IDENTIFY_PROMPT},
+            ]}],
+        )
+    except anthropic.RateLimitError:
+        raise SourceError("Reconnaissance très demandée en ce moment, réessaie dans un instant.")
+    except anthropic.APIStatusError as exc:
+        app.logger.warning("identification: %s %s", exc.status_code, exc.message)
+        raise SourceError("La reconnaissance par l'IA a échoué.")
+    except anthropic.APIConnectionError:
+        raise SourceError("Service de reconnaissance injoignable.")
+    if resp.stop_reason != "end_turn":
+        raise SourceError("La reconnaissance par l'IA n'a pas abouti.")
+    text = next((b.text for b in resp.content if b.type == "text"), "")
+    try:
+        out = json.loads(text)
+    except ValueError:
+        raise SourceError("Réponse de reconnaissance illisible.")
+    return {k: (out.get(k) or "").strip() for k in ("game", "name", "number", "confidence")}
+
+
+@app.post("/api/identify")
+@login_required
+def identify():
+    if not ANTHROPIC_API_KEY:
+        return jsonify(error="reconnaissance par l'IA non configurée"), 404
+    data = request.get_data(cache=False)
+    if len(data) < 100 or data[:3] != b"\xff\xd8\xff":
+        return jsonify(error="Photo JPEG attendue"), 415
+    try:
+        return jsonify(identify_card(data))
+    except SourceError as exc:
+        return jsonify(error=str(exc)), 502
 
 
 @app.get("/api/export.csv")

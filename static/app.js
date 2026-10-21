@@ -850,6 +850,25 @@ function findCard(img) {
   return detectCardBox(gray, c.width, c.height);
 }
 
+/** Envoie la photo au serveur, qui la fait reconnaître par Claude. Renvoie null si la carte n'est pas reconnue. */
+async function identifyByAI(file) {
+  const blob = await toJpegBlob(file, 1280, 0.85);
+  const r = await fetch("/api/identify", {
+    method: "POST", credentials: "same-origin", headers: { "Content-Type": "image/jpeg" }, body: blob,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || "Reconnaissance impossible");
+  if (!GAME_LABEL[data.game] || (!data.name && !data.number)) return null;
+  if (data.game !== addGame) { // la carte est d'un autre jeu que l'onglet choisi : on bascule
+    addGame = data.game;
+    $$("#add-game button").forEach((x) => x.classList.toggle("on", x.dataset.g === addGame));
+  }
+  return {
+    name: data.name, number: data.number, found: true, thumb: null,
+    raw: `Reconnue par l'IA : ${GAME_LABEL[data.game]} · « ${data.name} » · ${data.number || "numéro illisible"} (confiance : ${data.confidence})`,
+  };
+}
+
 /** Lit nom et numéro : on recadre sur la carte, puis on lit le haut (nom) et le bas (numéro) séparément, en haute résolution. */
 async function readCard(img, game, onStep) {
   const worker = await getWorker();
@@ -914,12 +933,21 @@ $("#photo").addEventListener("change", async (e) => {
     $("#preview").src = img.src;
     $("#preview").classList.remove("hidden");
     $("#results").innerHTML = "";
-    status.textContent = "Lecture de la carte… (la première fois, le module met quelques secondes à se charger)";
-    const res = await readCard(img, addGame, (s) => { status.textContent = s; });
+    let res = null;
+    if (sessionInfo.ai) {
+      // reconnaissance par l'IA (serveur) : trouve aussi le jeu tout seul. En cas d'échec, lecture de texte locale.
+      status.textContent = "Reconnaissance de la carte…";
+      res = await identifyByAI(file).catch((err) => { console.warn(err); return null; });
+    }
+    if (!res) {
+      status.textContent = "Lecture de la carte… (la première fois, le module met quelques secondes à se charger)";
+      res = await readCard(img, addGame, (s) => { status.textContent = s; });
+    }
     if (res.thumb) $("#preview").src = res.thumb; // montre la carte repérée
     $("#q-name").value = res.name;
     $("#q-number").value = res.number;
-    $("#ocr-raw").textContent = `Carte repérée dans la photo : ${res.found ? "oui" : "non (photo entière lue)"}\n${res.raw}`;
+    $("#ocr-raw").textContent = res.raw.startsWith("Reconnue par l'IA") ? res.raw
+      : `Carte repérée dans la photo : ${res.found ? "oui" : "non (photo entière lue)"}\n${res.raw}`;
     $("#ocr-debug").classList.remove("hidden");
     status.textContent = res.name || res.number
       ? "Vérifie le nom et le numéro, puis choisis la bonne carte ci-dessous."

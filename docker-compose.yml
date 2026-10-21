@@ -7,6 +7,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:?définis SECRET_KEY dans le fichier .env}
       POKEMONTCG_API_KEY: ${POKEMONTCG_API_KEY:-}
       REFRESH_HOUR: ${REFRESH_HOUR:-6}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       TZ: Europe/Paris
     volumes:
       - ./data:/data
