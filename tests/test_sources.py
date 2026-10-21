@@ -1,7 +1,7 @@
 """Sources de prix Magic et One Piece, avec des réponses d'API simulées (pas de réseau)."""
 import pytest
 
-import app as sleevr
+import app as holocarte
 
 
 class FakeResponse:
@@ -14,7 +14,7 @@ class FakeResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise sleevr.requests.HTTPError(str(self.status_code))
+            raise holocarte.requests.HTTPError(str(self.status_code))
 
 
 BOLT = {
@@ -41,9 +41,9 @@ def http(monkeypatch):
                 return fn(url, kw.get("params") or {})
         return FakeResponse(404, {})
 
-    monkeypatch.setattr(sleevr, "get_with_retry", fake_get)
-    monkeypatch.setattr(sleevr, "usd_to_eur_rate", lambda: 0.9)
-    sleevr._op_cache.update(at=0.0, cards=[])
+    monkeypatch.setattr(holocarte, "get_with_retry", fake_get)
+    monkeypatch.setattr(holocarte, "usd_to_eur_rate", lambda: 0.9)
+    holocarte._op_cache.update(at=0.0, cards=[])
     return routes, calls
 
 
@@ -57,7 +57,7 @@ def test_magic_french_name_shows_french_and_prices_english_prints(http):
         return FakeResponse(200, {"data": [BOLT]})
 
     routes["/cards/search"] = search
-    res = sleevr.fetch_magic(name="Foudre")
+    res = holocarte.fetch_magic(name="Foudre")
     assert [r["api_id"] for r in res] == ["abc", "abc|foil"]
     assert res[0]["name"] == "Foudre"
     assert res[0]["price"] == 1.2 and res[1]["price"] == 4.5
@@ -67,21 +67,21 @@ def test_magic_french_name_shows_french_and_prices_english_prints(http):
 def test_magic_set_and_number(http):
     routes, _ = http
     routes["/cards/m11/149"] = lambda u, p: FakeResponse(200, BOLT)
-    res = sleevr.fetch_magic(number="M11 149")
+    res = holocarte.fetch_magic(number="M11 149")
     assert res[0]["set_name"] == "Magic 2011"
 
 
 def test_magic_refresh_keeps_finish(http):
     routes, _ = http
     routes["/cards/abc"] = lambda u, p: FakeResponse(200, BOLT)
-    res = sleevr.fetch_magic(api_id="abc|foil")
+    res = holocarte.fetch_magic(api_id="abc|foil")
     assert len(res) == 1 and res[0]["price"] == 4.5
 
 
 def test_onepiece_code_converts_usd_to_eur(http):
     routes, _ = http
     routes["/sets/card/OP01-001/"] = lambda u, p: FakeResponse(200, [ZORO, ZORO_P])
-    res = sleevr.fetch_onepiece(number="0P01-0O1")
+    res = holocarte.fetch_onepiece(number="0P01-0O1")
     assert [r["api_id"] for r in res] == ["OP01-001", "OP01-001_p1"]
     assert res[0]["price"] == 1.8 and res[1]["price"] == 27.0
 
@@ -89,7 +89,7 @@ def test_onepiece_code_converts_usd_to_eur(http):
 def test_onepiece_refresh_by_variant(http):
     routes, _ = http
     routes["/sets/card/OP01-001/"] = lambda u, p: FakeResponse(200, [ZORO, ZORO_P])
-    res = sleevr.fetch_onepiece(api_id="OP01-001_p1")
+    res = holocarte.fetch_onepiece(api_id="OP01-001_p1")
     assert len(res) == 1 and res[0]["price"] == 27.0
 
 
@@ -98,13 +98,13 @@ def test_onepiece_name_search_uses_cached_list(http):
     routes["/allSetCards/"] = lambda u, p: FakeResponse(200, [ZORO, ZORO_P])
     routes["/allSTCards/"] = lambda u, p: FakeResponse(200, [])
     routes["/allPromoCards/"] = lambda u, p: FakeResponse(200, [])
-    assert len(sleevr.fetch_onepiece(name="zoro")) == 2
+    assert len(holocarte.fetch_onepiece(name="zoro")) == 2
     n = len(calls)
-    assert len(sleevr.fetch_onepiece(name="Roronoa")) == 2
+    assert len(holocarte.fetch_onepiece(name="Roronoa")) == 2
     assert len(calls) == n  # liste gardée en mémoire
 
 
 @pytest.mark.parametrize("raw,code", [("OP01-001", "OP01-001"), ("op01 001", "OP01-001"), ("ST10-005", "ST10-005"),
                                       ("P-012", "P-012"), ("EB01-012", "EB01-012"), ("Luffy", None)])
 def test_onepiece_code_parsing(raw, code):
-    assert sleevr._op_code(raw) == code
+    assert holocarte._op_code(raw) == code

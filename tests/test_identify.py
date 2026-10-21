@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import app as sleevr
+import app as holocarte
 
 JPEG = b"\xff\xd8\xff" + b"0" * 200
 
@@ -20,23 +20,23 @@ class FakeMessages:
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(sleevr, "DB_PATH", str(tmp_path / "cartes.db"))
-    monkeypatch.setattr(sleevr, "SIGNUP_CODE", "")
-    sleevr.init_db()
-    c = sleevr.app.test_client()
+    monkeypatch.setattr(holocarte, "DB_PATH", str(tmp_path / "cartes.db"))
+    monkeypatch.setattr(holocarte, "SIGNUP_CODE", "")
+    holocarte.init_db()
+    c = holocarte.app.test_client()
     c.post("/api/register", json={"username": "alex", "password": "motdepasse"})
     return c
 
 
 def fake_ai(monkeypatch, reply, stop="end_turn"):
     msgs = FakeMessages(reply, stop)
-    monkeypatch.setattr(sleevr, "ANTHROPIC_API_KEY", "test")
-    monkeypatch.setattr(sleevr, "_ai_client", SimpleNamespace(beta=SimpleNamespace(messages=msgs)))
+    monkeypatch.setattr(holocarte, "ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(holocarte, "_ai_client", SimpleNamespace(beta=SimpleNamespace(messages=msgs)))
     return msgs
 
 
 def test_disabled_without_key(client, monkeypatch):
-    monkeypatch.setattr(sleevr, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(holocarte, "ANTHROPIC_API_KEY", "")
     assert client.post("/api/identify", data=JPEG).status_code == 404
     assert client.get("/api/session").get_json()["ai"] is False
 

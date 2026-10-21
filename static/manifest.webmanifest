@@ -1,6 +1,6 @@
 {
-  "name": "Sleevr",
-  "short_name": "Sleevr",
+  "name": "Holocarte",
+  "short_name": "Holocarte",
   "description": "Ta collection de cartes (Pokémon, Yu-Gi-Oh!, Magic, One Piece) avec suivi des prix",
   "start_url": "/",
   "display": "standalone",
