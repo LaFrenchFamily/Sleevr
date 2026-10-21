@@ -3,7 +3,7 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      APP_PASSWORD: ${APP_PASSWORD:?définis APP_PASSWORD dans le fichier .env}
+      SIGNUP_CODE: ${SIGNUP_CODE:?définis SIGNUP_CODE dans le fichier .env (code d'invitation)}
       SECRET_KEY: ${SECRET_KEY:?définis SECRET_KEY dans le fichier .env}
       POKEMONTCG_API_KEY: ${POKEMONTCG_API_KEY:-}
       REFRESH_HOUR: ${REFRESH_HOUR:-6}

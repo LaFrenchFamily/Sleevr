@@ -13,7 +13,7 @@ Sources, toutes gratuites : [pokemontcg.io](https://pokemontcg.io) (Pokémon), [
 ## Option A — Sur ton PC Windows (le plus simple pour commencer)
 
 1. Installe Python depuis python.org (coche « Add python.exe to PATH »).
-2. Double-clique sur `lancer.bat`, choisis un mot de passe.
+2. Double-clique sur `lancer.bat`, choisis un code d'invitation, puis crée ton compte dans l'appli.
 3. PC : http://localhost:8000 — Téléphone (même Wi-Fi) : `http://ADRESSE-IP-DU-PC:8000` (l'adresse s'affiche dans la fenêtre).
 
 Le PC doit rester allumé pour le relevé quotidien des prix. Sans HTTPS, l'installation « sur l'écran d'accueil » n'est pas proposée, mais la prise de photo fonctionne.
@@ -23,12 +23,19 @@ Le PC doit rester allumé pour le relevé quotidien des prix. Sans HTTPS, l'inst
 Prérequis : Docker, et un nom de domaine qui pointe vers le serveur (HTTPS automatique via Caddy).
 
 ```bash
-cp .env.example .env     # puis édite : mot de passe, SECRET_KEY, DOMAIN
+cp .env.example .env     # puis édite : SIGNUP_CODE, SECRET_KEY, DOMAIN
 docker compose up -d --build
 ```
 
 Ouvre `https://ton-domaine` sur le téléphone, puis « Ajouter à l'écran d'accueil ».
 Les données sont dans le dossier `data/` (une seule base `cartes.db`) : sauvegarde ce dossier.
+
+## Comptes et collectionneurs
+
+- Chacun crée son compte (pseudo + mot de passe) avec le **code d'invitation** (`SIGNUP_CODE`) et a **sa propre collection**.
+- L'onglet **Collectionneurs** montre les collections des autres membres (valeur, cartes, photos), en lecture seule. Les notes restent privées. Dans « Mon compte » (bouton rond en haut), tu peux rendre ta collection privée.
+- **Mise à jour d'une ancienne installation** : la collection existante est rattachée automatiquement au **premier compte créé**. Si tu avais `APP_PASSWORD`, il sert de code d'invitation tant que `SIGNUP_CODE` n'est pas défini.
+- Le relevé quotidien des prix est commun à tous : une carte présente dans plusieurs collections n'est relevée qu'une fois.
 
 ## À savoir
 

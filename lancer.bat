@@ -7,7 +7,7 @@ if not exist .venv (
   python -m venv .venv
   .venv\Scripts\pip install -q -r requirements.txt
 )
-set /p APP_PASSWORD=Mot de passe pour l'appli (laisse vide = pas de mot de passe) : 
+set /p SIGNUP_CODE=Code d'invitation pour creer un compte (laisse vide = inscription libre) : 
 set SECRET_KEY=local-secret-change-me
 echo.
 echo Appli lancee. Sur ce PC : http://localhost:8000

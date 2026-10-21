@@ -50,6 +50,8 @@ const dn = (x) => x.name_fr || x.name;
 const GAME_LABEL = { pokemon: "Pokémon", yugioh: "Yu-Gi-Oh!", magic: "Magic", onepiece: "One Piece" };
 
 let items = [];
+let me = null; // membre connecté
+let sessionInfo = {};
 let addGame = "pokemon";
 let filterGame = "";
 let sumChart = null;
@@ -78,17 +80,82 @@ function toast(msg, ms = 2600) {
 }
 
 /* ------------------------------------------------------------- connexion */
-function showLogin() { $("#app").classList.add("hidden"); $("#login").classList.remove("hidden"); }
-function showApp() { $("#login").classList.add("hidden"); $("#app").classList.remove("hidden"); }
+let loginMode = "login";
+function setLoginMode(m) {
+  loginMode = m;
+  $$("#login-mode button").forEach((x) => x.classList.toggle("on", x.dataset.m === m));
+  const signup = m === "signup";
+  $("#login-code").classList.toggle("hidden", !(signup && sessionInfo.signup_code));
+  $("#login-code").required = signup && !!sessionInfo.signup_code;
+  $("#login-pwd").autocomplete = signup ? "new-password" : "current-password";
+  $("#login-btn").textContent = signup ? "Créer mon compte" : "Entrer";
+  const hint = signup
+    ? (sessionInfo.has_users ? "" : "Premier compte : il récupère la collection déjà enregistrée.") +
+      (sessionInfo.signup_code ? " Le code d'invitation t'est donné par la personne qui héberge l'appli." : "")
+    : "";
+  $("#login-hint").textContent = hint.trim();
+  $("#login-hint").classList.toggle("hidden", !hint.trim());
+  $("#login-err").textContent = "";
+}
+$$("#login-mode button").forEach((b) => b.addEventListener("click", () => setLoginMode(b.dataset.m)));
+
+function showLogin() {
+  $("#app").classList.add("hidden"); $("#login").classList.remove("hidden");
+  setLoginMode(sessionInfo.has_users === false ? "signup" : loginMode);
+}
+function showApp() {
+  $("#login").classList.add("hidden"); $("#app").classList.remove("hidden");
+  $("#btn-me").textContent = me ? me.username.slice(0, 1) : "?";
+}
 
 $("#login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("#login-err").textContent = "";
   try {
-    await api("/login", { method: "POST", body: { password: $("#login-pwd").value } });
+    const body = { username: $("#login-user").value.trim(), password: $("#login-pwd").value, code: $("#login-code").value.trim() };
+    const r = await api(loginMode === "signup" ? "/register" : "/login", { method: "POST", body });
+    me = r.user;
+    $("#login-pwd").value = "";
     showApp();
     loadAll();
   } catch (err) { $("#login-err").textContent = err.message; }
+});
+
+/* ------------------------------------------------------------- mon compte */
+$("#btn-me").addEventListener("click", () => {
+  const d = $("#dlg-me");
+  d.innerHTML = `
+    <h2 style="margin:0 0 12px">${esc(me.username)}</h2>
+    <div class="custom">
+      <label class="switch"><input type="checkbox" id="me-public" ${me.is_public ? "checked" : ""}><span>Les autres membres peuvent voir ma collection</span></label>
+      <div class="muted small" style="margin-top:6px">Ils voient tes cartes et leur valeur, jamais tes notes.</div>
+    </div>
+    <details style="margin:10px 0">
+      <summary class="muted">Changer de mot de passe</summary>
+      <label class="field">Mot de passe actuel<input id="me-old" type="password" autocomplete="current-password"></label>
+      <label class="field">Nouveau mot de passe (8 caractères min.)<input id="me-new" type="password" autocomplete="new-password"></label>
+      <button class="btn" id="me-pwd" type="button">Changer</button>
+    </details>
+    <div class="dlg-actions">
+      <button class="btn danger" id="me-out">Se déconnecter</button>
+      <button class="btn" id="me-close">Fermer</button>
+    </div>`;
+  d.showModal();
+  $("#me-close", d).onclick = () => d.close();
+  $("#me-public", d).onchange = async (e) => {
+    try { me = (await api("/me", { method: "PATCH", body: { is_public: e.target.checked } })).user; toast(me.is_public ? "Collection visible par les membres" : "Collection privée"); }
+    catch (err) { e.target.checked = !e.target.checked; toast(err.message); }
+  };
+  $("#me-pwd", d).onclick = async () => {
+    try {
+      await api("/me", { method: "PATCH", body: { password: $("#me-old", d).value, new_password: $("#me-new", d).value } });
+      toast("Mot de passe changé ✓"); d.close();
+    } catch (err) { toast(err.message); }
+  };
+  $("#me-out", d).onclick = async () => {
+    await api("/logout", { method: "POST" }).catch(() => {});
+    me = null; items = []; d.close(); showLogin();
+  };
 });
 
 /* ------------------------------------------------------------- onglets */
@@ -96,6 +163,8 @@ $$("nav button").forEach((b) => b.addEventListener("click", () => {
   $$("nav button").forEach((x) => x.classList.toggle("on", x === b));
   $("#tab-collection").classList.toggle("hidden", b.dataset.tab !== "collection");
   $("#tab-add").classList.toggle("hidden", b.dataset.tab !== "add");
+  $("#tab-members").classList.toggle("hidden", b.dataset.tab !== "members");
+  if (b.dataset.tab === "members") loadMembers();
   window.scrollTo(0, 0);
 }));
 
@@ -155,7 +224,11 @@ function renderList() {
   }[sort];
   rows.sort(cmp);
   $("#empty").classList.toggle("hidden", items.length > 0);
-  $("#list").innerHTML = rows.map((i) => `
+  $("#list").innerHTML = rows.map(itemHtml).join("");
+}
+
+function itemHtml(i) {
+  return `
     <div class="item" data-id="${i.id}">
       ${i.image ? `<img loading="lazy" src="${esc(i.image)}" alt="">` : `<div class="noimg"></div>`}
       <div class="info">
@@ -167,7 +240,7 @@ function renderList() {
         <div class="price">${money(i.total)}</div>
         ${i.use_custom ? `<span class="badge">perso</span>` : varBadge("7 j", i.var7)}
       </div>
-    </div>`).join("");
+    </div>`;
 }
 
 $("#list").addEventListener("click", (e) => {
@@ -349,6 +422,91 @@ async function openCard(id) {
     $("#dlg-nohist", dlg).classList.toggle("hidden", ok);
     if (ok) dlgChart = lineChart($("#dlg-chart", dlg), h.points.map((p) => ({ day: p.day, price: p.price })), dlgChart);
   } catch (_) { /* l'historique est facultatif */ }
+}
+
+/* ------------------------------------------------------------- collectionneurs */
+let memberItems = [];
+let memberId = null;
+
+async function loadMembers() {
+  $("#member-view").classList.add("hidden");
+  $("#members-list").classList.remove("hidden");
+  try {
+    const { members } = await api("/members");
+    $("#members").innerHTML = members.map((m) => `
+      <div class="item member" data-uid="${m.id}">
+        <div class="avatar">${esc(m.username.slice(0, 1))}</div>
+        <div class="info">
+          <div class="name">${esc(m.username)}${m.me ? ` <span class="badge">toi${m.is_public ? "" : " · privée"}</span>` : ""}</div>
+          <div class="sub">${m.cards} carte${m.cards > 1 ? "s" : ""} · ${m.unique} référence${m.unique > 1 ? "s" : ""}</div>
+        </div>
+        <div class="right"><div class="price">${money(m.total)}</div>${varBadge("7 j", m.var7)}</div>
+      </div>`).join("") || `<p class="muted center">Personne d'autre pour l'instant.</p>`;
+  } catch (err) { toast(err.message); }
+}
+$("#members").addEventListener("click", (e) => {
+  const el = e.target.closest(".item");
+  if (el) openMember(+el.dataset.uid);
+});
+$("#member-back").addEventListener("click", loadMembers);
+
+async function openMember(uid) {
+  try {
+    const r = await api("/members/" + uid);
+    memberId = uid;
+    memberItems = r.items;
+    $("#mv-name").textContent = `Collection de ${r.member.username}`;
+    $("#mv-total").textContent = money(r.summary.total);
+    $("#mv-vars").innerHTML = varBadge("1 j", r.summary.var1) + varBadge("7 j", r.summary.var7) + varBadge("30 j", r.summary.var30);
+    $("#mv-meta").textContent = `${r.summary.cards} carte${r.summary.cards > 1 ? "s" : ""} · ${r.summary.unique} référence${r.summary.unique > 1 ? "s" : ""}`;
+    $("#mv-filter").value = "";
+    renderMember();
+    $("#members-list").classList.add("hidden");
+    $("#member-view").classList.remove("hidden");
+    window.scrollTo(0, 0);
+  } catch (err) { toast(err.message); }
+}
+function renderMember() {
+  const txt = $("#mv-filter").value.trim().toLowerCase();
+  const rows = memberItems.filter((i) => !txt || dn(i).toLowerCase().includes(txt) || i.name.toLowerCase().includes(txt))
+    .sort((a, b) => (b.total ?? -1) - (a.total ?? -1));
+  $("#mv-list").innerHTML = rows.map(itemHtml).join("") || `<p class="muted center">Aucune carte.</p>`;
+}
+$("#mv-filter").addEventListener("input", renderMember);
+$("#mv-list").addEventListener("click", (e) => {
+  const el = e.target.closest(".item");
+  if (!el) return;
+  if (me && memberId === me.id) { openCard(+el.dataset.id); return; }
+  viewCard(memberItems.find((x) => x.id === +el.dataset.id));
+});
+
+/** Fiche en lecture seule d'une carte d'un autre membre. */
+async function viewCard(it) {
+  if (!it) return;
+  const dlg = $("#dlg-card");
+  const photos = SIDES.filter((s) => it["photo_" + s]);
+  dlg.innerHTML = `
+    <div class="head">
+      ${it.image ? `<img src="${esc(it.image)}" alt="">` : ""}
+      <div>
+        <h2 style="margin:0 0 4px">${esc(dn(it))}</h2>
+        <div class="muted small">${esc(GAME_LABEL[it.game])} · ${esc(it.set_name || "")}<br>${esc(it.number || "")} ${esc(it.rarity || "")}</div>
+        <div style="margin-top:8px"><b>${money(it.price)}</b> <span class="muted small">l'unité · ${esc(it.condition)} · ×${it.quantity}</span></div>
+        ${it.use_custom ? `<div class="muted small">Prix fixé par son propriétaire</div>` : priceNote(it.src_date, it.game)}
+        ${it.use_custom ? "" : `<div class="vars" style="margin-top:6px">${varBadge("1 j", it.var1)}${varBadge("7 j", it.var7)}${varBadge("30 j", it.var30)}</div>`}
+      </div>
+    </div>
+    <div class="dlg-chart"><canvas id="dlg-chart"></canvas></div>
+    ${photos.length ? `<div class="photos">${photos.map((s) => slotHtml(s, `/api/collection/${it.id}/photo/${s}?v=${it["photo_" + s]}`, false)).join("")}</div>` : ""}
+    <button class="btn" id="c-close" style="margin-top:8px">Fermer</button>`;
+  dlg.showModal();
+  $("#c-close", dlg).onclick = () => dlg.close();
+  try {
+    const h = await api(`/card/${it.card_id}/history`);
+    const ok = h.points.length >= 2;
+    $(".dlg-chart", dlg).classList.toggle("hidden", !ok);
+    if (ok) dlgChart = lineChart($("#dlg-chart", dlg), h.points.map((p) => ({ day: p.day, price: p.price })), dlgChart);
+  } catch (_) { /* facultatif */ }
 }
 
 /* ------------------------------------------------------------- ajout */
@@ -778,6 +936,8 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 (async function boot() {
   try {
     const s = await fetch("/api/session", { credentials: "same-origin" }).then((r) => r.json());
+    sessionInfo = s;
+    me = s.user;
     if (s.ok) { showApp(); loadAll(); } else showLogin();
   } catch (_) { showApp(); toast("Serveur injoignable"); }
 })();

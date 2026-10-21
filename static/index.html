@@ -19,8 +19,15 @@
     <img class="logo" src="icon.svg" alt="">
     <h1 class="brand">Sleevr</h1>
     <p class="muted tagline">Ta collection de cartes, à l'abri.</p>
+    <div class="seg" id="login-mode">
+      <button type="button" data-m="login" class="on">Se connecter</button>
+      <button type="button" data-m="signup">Créer un compte</button>
+    </div>
+    <input id="login-user" type="text" placeholder="Pseudo" autocomplete="username" autocapitalize="none" required>
     <input id="login-pwd" type="password" placeholder="Mot de passe" autocomplete="current-password" required>
-    <button class="btn primary" type="submit">Entrer</button>
+    <input id="login-code" class="hidden" type="text" placeholder="Code d'invitation" autocomplete="off" autocapitalize="none">
+    <p id="login-hint" class="muted small hidden"></p>
+    <button id="login-btn" class="btn primary" type="submit">Entrer</button>
     <p id="login-err" class="err"></p>
   </form>
 </div>
@@ -28,7 +35,10 @@
 <div id="app" class="hidden">
   <header>
     <div class="brand-row"><img src="icon.svg" alt=""><h1 class="brand">Sleevr</h1></div>
-    <button id="btn-refresh" class="icon-btn" title="Mettre à jour les prix" aria-label="Mettre à jour les prix">⟳</button>
+    <div class="head-actions">
+      <button id="btn-refresh" class="icon-btn" title="Mettre à jour les prix" aria-label="Mettre à jour les prix">⟳</button>
+      <button id="btn-me" class="icon-btn avatar" title="Mon compte" aria-label="Mon compte"></button>
+    </div>
   </header>
 
   <main>
@@ -93,11 +103,30 @@
 
       <div id="results" class="list"></div>
     </section>
+    <!-- ========== Collectionneurs ========== -->
+    <section id="tab-members" class="hidden">
+      <div id="members-list">
+        <p class="muted small">Les collections que les autres membres ont choisi de montrer.</p>
+        <div id="members" class="list"></div>
+      </div>
+      <div id="member-view" class="hidden">
+        <button id="member-back" class="btn" type="button" style="margin-bottom:12px">‹ Tous les collectionneurs</button>
+        <div class="card summary">
+          <div id="mv-name" class="muted small"></div>
+          <div id="mv-total" class="big">—</div>
+          <div id="mv-vars" class="vars"></div>
+          <div id="mv-meta" class="muted small"></div>
+        </div>
+        <div class="toolbar"><input id="mv-filter" type="search" placeholder="Filtrer par nom…"></div>
+        <div id="mv-list" class="list"></div>
+      </div>
+    </section>
   </main>
 
   <nav>
     <button data-tab="collection" class="on"><span>▦</span>Collection</button>
     <button data-tab="add"><span>＋</span>Ajouter</button>
+    <button data-tab="members"><span>◎</span>Collectionneurs</button>
   </nav>
 </div>
 
@@ -105,6 +134,8 @@
 <dialog id="dlg-card"></dialog>
 <!-- Choix quantité / état à l'ajout -->
 <dialog id="dlg-add"></dialog>
+<!-- Mon compte -->
+<dialog id="dlg-me"></dialog>
 <!-- Visionneuse d'une photo recto/verso -->
 <dialog id="dlg-photo"></dialog>
 <input id="photo-pick" type="file" accept="image/*" capture="environment" hidden>

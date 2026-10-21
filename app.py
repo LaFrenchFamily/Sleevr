@@ -17,10 +17,13 @@ from functools import wraps
 
 import requests
 from flask import Flask, g, jsonify, request, send_file, send_from_directory, session
+from werkzeug.security import check_password_hash, generate_password_hash
 
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
 DB_PATH = os.path.join(DATA_DIR, "cartes.db")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+# code à donner pour créer un compte (par défaut l'ancien mot de passe de l'appli) ; vide = inscription libre
+SIGNUP_CODE = os.environ.get("SIGNUP_CODE", APP_PASSWORD)
 SECRET_KEY = os.environ.get("SECRET_KEY", "")
 POKEMON_API_KEY = os.environ.get("POKEMONTCG_API_KEY", "")
 REFRESH_HOUR = int(os.environ.get("REFRESH_HOUR", "6"))  # heure locale du relevé quotidien
@@ -56,8 +59,16 @@ CREATE TABLE IF NOT EXISTS cards (
     image TEXT,
     UNIQUE (game, api_id)
 );
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    is_public INTEGER NOT NULL DEFAULT 1,   -- 1 = les autres membres peuvent voir ta collection
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS collection (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,  -- NULL : ligne d'avant les comptes, reprise par le 1er compte
     card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
     quantity INTEGER NOT NULL DEFAULT 1,
     condition TEXT NOT NULL DEFAULT 'NM',
@@ -65,7 +76,7 @@ CREATE TABLE IF NOT EXISTS collection (
     added_at TEXT NOT NULL,
     custom_price REAL,                -- prix fixé par toi (EUR), pour cette ligne
     use_custom INTEGER NOT NULL DEFAULT 0,  -- 1 = on utilise ton prix au lieu de celui du marché
-    UNIQUE (card_id, condition)
+    UNIQUE (user_id, card_id, condition)
 );
 CREATE TABLE IF NOT EXISTS prices (
     card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
@@ -116,34 +127,118 @@ def init_db():
         db.execute("ALTER TABLE collection ADD COLUMN custom_price REAL")
     if "use_custom" not in kcols:
         db.execute("ALTER TABLE collection ADD COLUMN use_custom INTEGER NOT NULL DEFAULT 0")
+    # migration : comptes. La contrainte d'unicité change (une même carte peut être chez plusieurs membres),
+    # SQLite oblige à reconstruire la table ; les lignes existantes iront au premier compte créé.
+    if "user_id" not in kcols:
+        db.execute("ALTER TABLE collection RENAME TO collection_old")
+        db.executescript(SCHEMA)
+        db.execute(
+            "INSERT INTO collection (id, user_id, card_id, quantity, condition, notes, added_at, custom_price, use_custom) "
+            "SELECT id, NULL, card_id, quantity, condition, notes, added_at, custom_price, use_custom FROM collection_old"
+        )
+        db.execute("DROP TABLE collection_old")
     db.commit()
     db.close()
 
 
 # ----------------------------------------------------------------- authentification
+def current_user():
+    uid = session.get("uid")
+    if not uid:
+        return None
+    return get_db().execute("SELECT id, username, is_public FROM users WHERE id=?", (uid,)).fetchone()
+
+
 def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if APP_PASSWORD and not session.get("ok"):
+        user = current_user()
+        if not user:
             return jsonify(error="non connecté"), 401
+        g.uid = user["id"]
         return fn(*args, **kwargs)
 
     return wrapper
 
 
+def user_json(u):
+    return {"id": u["id"], "username": u["username"], "is_public": bool(u["is_public"])}
+
+
+USERNAME_RE = re.compile(r"^[\w.\-]{3,30}$")
+
+
+def _start_session(uid):
+    session.clear()
+    session.permanent = True
+    session["uid"] = uid
+
+
+@app.post("/api/register")
+def register():
+    p = request.get_json(silent=True) or {}
+    username = (p.get("username") or "").strip()
+    password = p.get("password") or ""
+    if SIGNUP_CODE and not hmac.compare_digest(str(p.get("code") or ""), SIGNUP_CODE):
+        return jsonify(error="code d'invitation incorrect"), 403
+    if not USERNAME_RE.match(username):
+        return jsonify(error="pseudo : 3 à 30 caractères, lettres, chiffres, point, tiret ou _"), 400
+    if len(password) < 8:
+        return jsonify(error="mot de passe : 8 caractères minimum"), 400
+    db = get_db()
+    first = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+    try:
+        cur = db.execute("INSERT INTO users (username, password_hash, created_at) VALUES (?,?,?)",
+                         (username, generate_password_hash(password), datetime.now().isoformat(timespec="seconds")))
+    except sqlite3.IntegrityError:
+        return jsonify(error="ce pseudo est déjà pris"), 409
+    if first:  # le premier compte récupère la collection d'avant les comptes
+        db.execute("UPDATE collection SET user_id=? WHERE user_id IS NULL", (cur.lastrowid,))
+    db.commit()
+    _start_session(cur.lastrowid)
+    return jsonify(ok=True, user=user_json(current_user()))
+
+
 @app.post("/api/login")
 def login():
-    pwd = (request.get_json(silent=True) or {}).get("password", "")
-    if not APP_PASSWORD or hmac.compare_digest(pwd, APP_PASSWORD):
-        session.permanent = True
-        session["ok"] = True
-        return jsonify(ok=True)
-    return jsonify(error="mot de passe incorrect"), 403
+    p = request.get_json(silent=True) or {}
+    u = get_db().execute("SELECT * FROM users WHERE username=?", ((p.get("username") or "").strip(),)).fetchone()
+    if not u or not check_password_hash(u["password_hash"], p.get("password") or ""):
+        time.sleep(0.5)  # freine les essais à la chaîne
+        return jsonify(error="pseudo ou mot de passe incorrect"), 403
+    _start_session(u["id"])
+    return jsonify(ok=True, user=user_json(u))
+
+
+@app.post("/api/logout")
+def logout():
+    session.clear()
+    return jsonify(ok=True)
 
 
 @app.get("/api/session")
 def session_state():
-    return jsonify(ok=bool(not APP_PASSWORD or session.get("ok")), protected=bool(APP_PASSWORD))
+    u = current_user()
+    has_users = get_db().execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
+    return jsonify(ok=bool(u), user=user_json(u) if u else None, signup_code=bool(SIGNUP_CODE), has_users=has_users)
+
+
+@app.patch("/api/me")
+@login_required
+def update_me():
+    p = request.get_json(silent=True) or {}
+    db = get_db()
+    if "is_public" in p:
+        db.execute("UPDATE users SET is_public=? WHERE id=?", (int(bool(p["is_public"])), g.uid))
+    if p.get("new_password"):
+        u = db.execute("SELECT password_hash FROM users WHERE id=?", (g.uid,)).fetchone()
+        if not check_password_hash(u["password_hash"], p.get("password") or ""):
+            return jsonify(error="mot de passe actuel incorrect"), 403
+        if len(p["new_password"]) < 8:
+            return jsonify(error="mot de passe : 8 caractères minimum"), 400
+        db.execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(p["new_password"]), g.uid))
+    db.commit()
+    return jsonify(ok=True, user=user_json(current_user()))
 
 
 # ----------------------------------------------------------------- sources de prix
@@ -852,35 +947,49 @@ def add_to_collection():
     card_id = db.execute("SELECT id FROM cards WHERE game=? AND api_id=?", (p["game"], p["api_id"])).fetchone()["id"]
     # si la ligne existe déjà (même carte, même état), on ajoute la quantité ; le prix perso n'est écrasé que s'il est fourni
     db.execute(
-        "INSERT INTO collection (card_id, quantity, condition, added_at, custom_price, use_custom) VALUES (?,?,?,?,?,?) "
-        "ON CONFLICT(card_id, condition) DO UPDATE SET quantity = quantity + excluded.quantity"
+        "INSERT INTO collection (user_id, card_id, quantity, condition, added_at, custom_price, use_custom) "
+        "VALUES (?,?,?,?,?,?,?) "
+        "ON CONFLICT(user_id, card_id, condition) DO UPDATE SET quantity = quantity + excluded.quantity"
         + (", custom_price = excluded.custom_price, use_custom = excluded.use_custom" if use_custom else ""),
-        (card_id, qty, cond, datetime.now().isoformat(timespec="seconds"), custom, use_custom),
+        (g.uid, card_id, qty, cond, datetime.now().isoformat(timespec="seconds"), custom, use_custom),
     )
     store_price(db, card_id, _num(p.get("price")), _num(p.get("avg7")), _num(p.get("avg30")),
                 src_date=p.get("src_date"))
     db.commit()
-    entry_id = db.execute("SELECT id FROM collection WHERE card_id=? AND condition=?", (card_id, cond)).fetchone()["id"]
+    entry_id = db.execute("SELECT id FROM collection WHERE user_id=? AND card_id=? AND condition=?",
+                          (g.uid, card_id, cond)).fetchone()["id"]
     return jsonify(ok=True, card_id=card_id, entry_id=entry_id)
 
 
 COLLECTION_SQL = (
     "SELECT k.id, k.card_id, k.quantity, k.condition, k.notes, k.added_at, k.custom_price, k.use_custom, "
     "c.game, c.name, c.set_name, c.number, c.rarity, c.image "
-    "FROM collection k JOIN cards c ON c.id = k.card_id"
+    "FROM collection k JOIN cards c ON c.id = k.card_id WHERE k.user_id = ?"
 )
+
+
+def collection_items(db, uid, game=None):
+    sql = COLLECTION_SQL + (" AND c.game=?" if game in FETCHERS else "") + " ORDER BY c.name COLLATE NOCASE"
+    rows = db.execute(sql, (uid, game) if game in FETCHERS else (uid,)).fetchall()
+    return [card_row_with_prices(db, r) for r in rows]
 
 
 @app.get("/api/collection")
 @login_required
 def list_collection():
     db = get_db()
-    game = request.args.get("game")
-    sql = COLLECTION_SQL + (" WHERE c.game=?" if game in FETCHERS else "") + " ORDER BY c.name COLLATE NOCASE"
-    rows = db.execute(sql, (game,) if game in FETCHERS else ()).fetchall()
-    items = [card_row_with_prices(db, r) for r in rows]
+    items = collection_items(db, g.uid, request.args.get("game"))
     last = db.execute("SELECT value FROM meta WHERE key='last_refresh'").fetchone()
     return jsonify(items=items, last_refresh=last["value"] if last else None)
+
+
+def own_entry(cid):
+    return get_db().execute("SELECT * FROM collection WHERE id=? AND user_id=?", (cid, g.uid)).fetchone()
+
+
+def visible_owner(uid):
+    """Membre dont on peut voir la collection : soi-même, ou un membre qui l'a rendue visible."""
+    return get_db().execute("SELECT * FROM users WHERE id=? AND (is_public=1 OR id=?)", (uid, g.uid)).fetchone()
 
 
 @app.patch("/api/collection/<int:cid>")
@@ -888,7 +997,7 @@ def list_collection():
 def update_entry(cid):
     p = request.get_json(force=True)
     db = get_db()
-    row = db.execute("SELECT * FROM collection WHERE id=?", (cid,)).fetchone()
+    row = own_entry(cid)
     if not row:
         return jsonify(error="introuvable"), 404
     qty = max(1, int(p.get("quantity", row["quantity"])))
@@ -916,7 +1025,8 @@ def update_entry(cid):
 @login_required
 def delete_entry(cid):
     db = get_db()
-    db.execute("DELETE FROM collection WHERE id=?", (cid,))
+    if not db.execute("DELETE FROM collection WHERE id=? AND user_id=?", (cid, g.uid)).rowcount:
+        return jsonify(error="introuvable"), 404
     db.commit()
     for side in SIDES:  # les photos de cette carte partent avec elle
         try:
@@ -931,7 +1041,7 @@ def delete_entry(cid):
 def put_photo(cid, side):
     if side not in SIDES:
         return jsonify(error="côté inconnu (recto ou verso)"), 404
-    if not get_db().execute("SELECT 1 FROM collection WHERE id=?", (cid,)).fetchone():
+    if not own_entry(cid):
         return jsonify(error="carte introuvable"), 404
     data = request.get_data(cache=False)
     if len(data) < 100 or data[:3] != b"\xff\xd8\xff":  # signature d'un fichier JPEG
@@ -946,6 +1056,9 @@ def put_photo(cid, side):
 @app.get("/api/collection/<int:cid>/photo/<side>")
 @login_required
 def get_photo(cid, side):
+    row = get_db().execute("SELECT user_id FROM collection WHERE id=?", (cid,)).fetchone()
+    if not row or not visible_owner(row["user_id"]):
+        return jsonify(error="pas de photo"), 404
     if side not in SIDES or not os.path.exists(photo_path(cid, side)):
         return jsonify(error="pas de photo"), 404
     return send_file(photo_path(cid, side), mimetype="image/jpeg", max_age=86400)
@@ -956,6 +1069,8 @@ def get_photo(cid, side):
 def delete_photo(cid, side):
     if side not in SIDES:
         return jsonify(error="côté inconnu (recto ou verso)"), 404
+    if not own_entry(cid):
+        return jsonify(error="carte introuvable"), 404
     try:
         os.remove(photo_path(cid, side))
     except OSError:
@@ -972,13 +1087,10 @@ def history(card_id):
     return jsonify(points=[dict(r) for r in rows])
 
 
-@app.get("/api/summary")
-@login_required
-def summary():
-    """Valeur totale de la collection et son évolution jour par jour."""
-    db = get_db()
+def summary_for(db, uid):
+    """Valeur totale de la collection d'un membre et son évolution jour par jour."""
     rows = db.execute(
-        "SELECT k.quantity, k.card_id, k.custom_price, k.use_custom FROM collection k"
+        "SELECT k.quantity, k.card_id, k.custom_price, k.use_custom FROM collection k WHERE k.user_id=?", (uid,)
     ).fetchall()
     n_cards = sum(r["quantity"] for r in rows)
     n_unique = len({r["card_id"] for r in rows})
@@ -990,7 +1102,7 @@ def summary():
         if not (r["use_custom"] and r["custom_price"] is not None):
             qty[r["card_id"]] = qty.get(r["card_id"], 0) + r["quantity"]
     if not qty:
-        return jsonify(total=fixed, cards=n_cards, unique=n_unique, history=[], var1=None, var7=None, var30=None)
+        return dict(total=fixed, cards=n_cards, unique=n_unique, history=[], var1=None, var7=None, var30=None)
     marks = ",".join("?" * len(qty))
     price_rows = db.execute(
         f"SELECT card_id, day, price FROM prices WHERE card_id IN ({marks}) AND price IS NOT NULL ORDER BY day",
@@ -1014,7 +1126,7 @@ def summary():
             return None
         return round((total - past[-1]["total"]) / past[-1]["total"] * 100, 1)
 
-    return jsonify(
+    return dict(
         total=total,
         cards=n_cards,
         unique=n_unique,
@@ -1023,6 +1135,39 @@ def summary():
         var7=total_var(7),
         var30=total_var(30),
     )
+
+
+@app.get("/api/summary")
+@login_required
+def summary():
+    return jsonify(summary_for(get_db(), g.uid))
+
+
+# ----------------------------------------------------------------- les autres membres
+@app.get("/api/members")
+@login_required
+def members():
+    db = get_db()
+    out = []
+    for u in db.execute("SELECT * FROM users WHERE is_public=1 OR id=? ORDER BY username COLLATE NOCASE", (g.uid,)):
+        s = summary_for(db, u["id"])
+        out.append({**user_json(u), "me": u["id"] == g.uid, "total": s["total"], "cards": s["cards"],
+                    "unique": s["unique"], "var7": s["var7"]})
+    return jsonify(members=out)
+
+
+@app.get("/api/members/<int:uid>")
+@login_required
+def member_collection(uid):
+    db = get_db()
+    u = visible_owner(uid)
+    if not u:
+        return jsonify(error="collection privée ou membre inconnu"), 404
+    items = collection_items(db, uid)
+    if uid != g.uid:  # les notes restent privées
+        for it in items:
+            it["notes"] = ""
+    return jsonify(member=user_json(u), summary=summary_for(db, uid), items=items)
 
 
 @app.post("/api/refresh")
@@ -1044,7 +1189,7 @@ def export_csv():
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
     w.writerow(["Jeu", "Nom", "Extension", "Numéro", "Rareté", "État", "Quantité", "Prix unitaire (EUR)", "Total (EUR)", "Prix"])
-    for r in db.execute(COLLECTION_SQL + " ORDER BY c.game, c.name COLLATE NOCASE").fetchall():
+    for r in db.execute(COLLECTION_SQL + " ORDER BY c.game, c.name COLLATE NOCASE", (g.uid,)).fetchall():
         d = card_row_with_prices(db, r)
         w.writerow([d["game"], d["name_fr"], d["set_name"], d["number"], d["rarity"], d["condition"],
                     d["quantity"], d["price"], d["total"],
@@ -1052,7 +1197,7 @@ def export_csv():
     return app.response_class(
         "﻿" + buf.getvalue(),
         mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=ma-collection.csv"},
+        headers={"Content-Disposition": "attachment; filename=sleevr-collection.csv"},
     )
 
 

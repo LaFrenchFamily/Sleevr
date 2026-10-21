@@ -109,3 +109,10 @@ dialog .row .grow{flex:1}
 .switch input{width:22px;height:22px;accent-color:var(--accent);flex:none}
 #p-wrap{display:flex;align-items:center;gap:8px;margin:8px 0 4px}
 #p-wrap input{width:9ch;flex:none;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit}
+
+/* comptes */
+.head-actions{display:flex;gap:8px}
+.icon-btn.avatar{background:var(--holo);border:0;color:var(--on-accent);font-size:1rem;font-weight:700;text-transform:uppercase}
+.member .avatar{width:44px;height:44px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+  background:var(--holo);color:var(--on-accent);font-weight:700;font-size:1.1rem;text-transform:uppercase}
+.login .seg{margin-bottom:0}
