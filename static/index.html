@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14161c">
+<title>Ma Collection</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login" class="login hidden">
+  <form id="login-form">
+    <h1>Ma Collection</h1>
+    <input id="login-pwd" type="password" placeholder="Mot de passe" autocomplete="current-password" required>
+    <button class="btn primary" type="submit">Entrer</button>
+    <p id="login-err" class="err"></p>
+  </form>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1>Ma Collection</h1>
+    <button id="btn-refresh" class="icon-btn" title="Mettre à jour les prix" aria-label="Mettre à jour les prix">⟳</button>
+  </header>
+
+  <main>
+    <!-- ========== Collection ========== -->
+    <section id="tab-collection">
+      <div class="card summary">
+        <div class="muted small">Valeur de la collection</div>
+        <div id="sum-total" class="big">—</div>
+        <div id="sum-vars" class="vars"></div>
+        <div class="chart-box"><canvas id="sum-chart"></canvas></div>
+        <div id="sum-meta" class="muted small"></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="seg" id="filter-game">
+          <button data-g="" class="on">Tout</button>
+          <button data-g="pokemon">Pokémon</button>
+          <button data-g="yugioh">Yu-Gi-Oh!</button>
+        </div>
+        <input id="filter-text" type="search" placeholder="Filtrer par nom…">
+        <select id="sort">
+          <option value="name">Nom</option>
+          <option value="value">Valeur ↓</option>
+          <option value="var7">Variation 7 j ↓</option>
+          <option value="var7asc">Variation 7 j ↑</option>
+          <option value="recent">Ajout récent</option>
+        </select>
+      </div>
+
+      <div id="list" class="list"></div>
+      <p id="empty" class="muted center hidden">Aucune carte pour l'instant. Va dans « Ajouter » pour scanner ta première carte.</p>
+      <p class="center"><a id="export" href="/api/export.csv" class="muted small">Exporter en CSV</a></p>
+    </section>
+
+    <!-- ========== Ajouter ========== -->
+    <section id="tab-add" class="hidden">
+      <div class="seg" id="add-game">
+        <button data-g="pokemon" class="on">Pokémon</button>
+        <button data-g="yugioh">Yu-Gi-Oh!</button>
+      </div>
+
+      <label class="btn primary big-btn" for="photo">📷 Photographier une carte</label>
+      <input id="photo" type="file" accept="image/*" capture="environment" hidden>
+      <div id="ocr-status" class="muted small center"></div>
+      <img id="preview" class="preview hidden" alt="">
+      <details id="ocr-debug" class="ocr-debug hidden"><summary>Texte lu par l'appareil</summary><pre id="ocr-raw"></pre></details>
+
+      <div class="card">
+        <label class="field">Nom de la carte
+          <input id="q-name" type="text" placeholder="ex. Dracaufeu, Magicien Sombre…" autocomplete="off">
+        </label>
+        <label class="field">Numéro / code (facultatif)
+          <input id="q-number" type="text" placeholder="ex. 4/102 ou LOB-FR005" autocomplete="off">
+        </label>
+        <button id="btn-search" class="btn primary" type="button">Rechercher</button>
+        <p class="muted small">La photo remplit ces champs automatiquement ; corrige-les si la lecture est approximative.</p>
+      </div>
+
+      <div id="results" class="list"></div>
+    </section>
+  </main>
+
+  <nav>
+    <button data-tab="collection" class="on"><span>▦</span>Collection</button>
+    <button data-tab="add"><span>＋</span>Ajouter</button>
+  </nav>
+</div>
+
+<!-- Fiche d'une carte de la collection -->
+<dialog id="dlg-card"></dialog>
+<!-- Choix quantité / état à l'ajout -->
+<dialog id="dlg-add"></dialog>
+<!-- Visionneuse d'une photo recto/verso -->
+<dialog id="dlg-photo"></dialog>
+<input id="photo-pick" type="file" accept="image/*" capture="environment" hidden>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

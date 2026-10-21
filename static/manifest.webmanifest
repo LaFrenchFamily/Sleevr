@@ -1,0 +1,13 @@
+{
+  "name": "Ma Collection de cartes",
+  "short_name": "Collection",
+  "description": "Collection Pokémon et Yu-Gi-Oh! avec suivi des prix",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#14161c",
+  "theme_color": "#14161c",
+  "lang": "fr",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,29 @@
+services:
+  cartes:
+    build: .
+    restart: unless-stopped
+    environment:
+      APP_PASSWORD: ${APP_PASSWORD:?définis APP_PASSWORD dans le fichier .env}
+      SECRET_KEY: ${SECRET_KEY:?définis SECRET_KEY dans le fichier .env}
+      POKEMONTCG_API_KEY: ${POKEMONTCG_API_KEY:-}
+      REFRESH_HOUR: ${REFRESH_HOUR:-6}
+      TZ: Europe/Paris
+    volumes:
+      - ./data:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?définis DOMAIN dans le fichier .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - cartes
+
+volumes:
+  caddy_data:
