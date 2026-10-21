@@ -1,0 +1,34 @@
+# Holocarte sur Docker Desktop (ton PC), partagé sur Internet par Tailscale Funnel : gratuit, sans nom de domaine.
+# Adresse fixe du type https://holocarte.ton-reseau.ts.net. Guide : docs/partage-tailscale-funnel.md
+#   docker compose -f docker-compose.funnel.yml up -d --build
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: holocarte                    # donne l'adresse https://holocarte.<ton-reseau>.ts.net
+    restart: unless-stopped
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?colle la clé d'authentification Tailscale dans le fichier .env}
+      TS_STATE_DIR: /var/lib/tailscale     # garde l'identité de la machine : même adresse après redémarrage
+      TS_SERVE_CONFIG: /config/serve.json  # HTTPS public (Funnel) -> l'appli, sur le port 8000
+      TS_USERSPACE: "true"                 # pas besoin de droits réseau particuliers dans Docker Desktop
+    volumes:
+      - ./tailscale/state:/var/lib/tailscale
+      - ./tailscale/serve.json:/config/serve.json:ro
+    ports:
+      - "8000:8000"                        # accès direct depuis ton PC : http://localhost:8000
+
+  app:
+    build: .
+    restart: unless-stopped
+    network_mode: service:tailscale        # l'appli partage le réseau du conteneur Tailscale
+    depends_on:
+      - tailscale
+    environment:
+      SIGNUP_CODE: ${SIGNUP_CODE:?définis SIGNUP_CODE dans le fichier .env (code d'invitation)}
+      SECRET_KEY: ${SECRET_KEY:?définis SECRET_KEY dans le fichier .env}
+      POKEMONTCG_API_KEY: ${POKEMONTCG_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      REFRESH_HOUR: ${REFRESH_HOUR:-6}
+      TZ: Europe/Paris
+    volumes:
+      - ./data:/data                       # collection, photos et sauvegardes : sur ton disque

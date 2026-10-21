@@ -32,7 +32,10 @@ Les données sont dans le dossier `data/` (une seule base `cartes.db`, les photo
 
 ## Option C — Sur ton PC avec Docker Desktop, partagé sur Internet
 
-Docker Desktop + un tunnel Cloudflare : tes amis accèdent à l'appli en HTTPS sans que tu ouvres de port sur ta box. Le PC doit rester allumé. Guide pas à pas : [docs/partage-docker-desktop.md](docs/partage-docker-desktop.md), puis double-clic sur `partager.bat`.
+Docker Desktop + un tunnel Cloudflare : tes amis accèdent à l'appli en HTTPS sans que tu ouvres de port sur ta box. Le PC doit rester allumé. Deux façons :
+
+- **Sans nom de domaine, gratuit** : Tailscale Funnel, adresse fixe `https://holocarte.ton-reseau.ts.net`. Guide : [docs/partage-tailscale-funnel.md](docs/partage-tailscale-funnel.md), puis double-clic sur `partager-tailscale.bat`.
+- **Avec ton nom de domaine** : Cloudflare Tunnel. Guide : [docs/partage-docker-desktop.md](docs/partage-docker-desktop.md), puis double-clic sur `partager.bat`.
 
 ## Comptes et collectionneurs
 
