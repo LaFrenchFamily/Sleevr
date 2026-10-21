@@ -3,18 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#14161c">
-<title>Ma Collection</title>
+<meta name="theme-color" content="#0e1020">
+<title>Sleevr</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <div id="login" class="login hidden">
   <form id="login-form">
-    <h1>Ma Collection</h1>
+    <img class="logo" src="icon.svg" alt="">
+    <h1 class="brand">Sleevr</h1>
+    <p class="muted tagline">Ta collection de cartes, à l'abri.</p>
     <input id="login-pwd" type="password" placeholder="Mot de passe" autocomplete="current-password" required>
     <button class="btn primary" type="submit">Entrer</button>
     <p id="login-err" class="err"></p>
@@ -23,7 +27,7 @@
 
 <div id="app" class="hidden">
   <header>
-    <h1>Ma Collection</h1>
+    <div class="brand-row"><img src="icon.svg" alt=""><h1 class="brand">Sleevr</h1></div>
     <button id="btn-refresh" class="icon-btn" title="Mettre à jour les prix" aria-label="Mettre à jour les prix">⟳</button>
   </header>
 

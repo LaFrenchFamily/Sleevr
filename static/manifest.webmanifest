@@ -1,11 +1,11 @@
 {
-  "name": "Ma Collection de cartes",
-  "short_name": "Collection",
-  "description": "Collection Pokémon et Yu-Gi-Oh! avec suivi des prix",
+  "name": "Sleevr",
+  "short_name": "Sleevr",
+  "description": "Ta collection de cartes (Pokémon, Yu-Gi-Oh!, Magic, One Piece) avec suivi des prix",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#14161c",
-  "theme_color": "#14161c",
+  "background_color": "#0e1020",
+  "theme_color": "#0e1020",
   "lang": "fr",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }

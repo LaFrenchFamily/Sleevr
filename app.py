@@ -1,4 +1,4 @@
-"""Ma Collection de cartes — serveur Flask + SQLite.
+"""Sleevr — serveur Flask + SQLite.
 
 Pokémon (pokemontcg.io) et Yu-Gi-Oh! (YGOPRODeck), prix Cardmarket en EUR,
 historique quotidien des prix et variations 1j / 7j / 30j.
