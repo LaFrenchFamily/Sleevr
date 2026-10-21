@@ -1,6 +1,7 @@
 """Sleevr — serveur Flask + SQLite.
 
-Pokémon (pokemontcg.io) et Yu-Gi-Oh! (YGOPRODeck), prix Cardmarket en EUR,
+Pokémon (pokemontcg.io), Yu-Gi-Oh! (YGOPRODeck), Magic (Scryfall) : prix Cardmarket en EUR ;
+One Piece (optcgapi.com) : prix TCGplayer converti en EUR.
 historique quotidien des prix et variations 1j / 7j / 30j.
 """
 import hmac
@@ -46,7 +47,7 @@ def too_large(_e):
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    game TEXT NOT NULL,              -- 'pokemon' | 'yugioh'
+    game TEXT NOT NULL,              -- 'pokemon' | 'yugioh' | 'magic' | 'onepiece'
     api_id TEXT NOT NULL,            -- id chez l'API (unique par jeu)
     name TEXT NOT NULL,
     set_name TEXT,
@@ -459,7 +460,206 @@ def fetch_yugioh(name=None, number=None, api_id=None):
     return entries[:60]
 
 
-FETCHERS = {"pokemon": fetch_pokemon, "yugioh": fetch_yugioh}
+# ----------------------------------------------------------------- Magic: The Gathering (Scryfall)
+# Scryfall demande un User-Agent et un Accept explicites, et au plus ~10 requêtes/s.
+SCRYFALL_HEADERS = {"User-Agent": "Sleevr/1.0", "Accept": "application/json"}
+
+
+def _mtg_image(c):
+    if c.get("image_uris"):
+        return c["image_uris"].get("small")
+    faces = c.get("card_faces") or [{}]
+    return (faces[0].get("image_uris") or {}).get("small")
+
+
+def _mtg_entries(c, display_name=None):
+    """Une entrée pour la version normale et une pour la version foil (prix Cardmarket différents)."""
+    prices = c.get("prices") or {}
+    base = {
+        "game": "magic",
+        "name": display_name or c.get("name", "?"),
+        "set_name": c.get("set_name"),
+        "number": f'{(c.get("set") or "").upper()} {c.get("collector_number", "")}'.strip(),
+        "image": _mtg_image(c),
+        "avg7": None,
+        "avg30": None,
+    }
+    out = []
+    finishes = c.get("finishes") or ["nonfoil"]
+    if "nonfoil" in finishes or prices.get("eur") is not None:
+        out.append({**base, "api_id": c["id"], "rarity": c.get("rarity"), "price": _num(prices.get("eur"))})
+    if "foil" in finishes or prices.get("eur_foil") is not None:
+        out.append({**base, "api_id": f'{c["id"]}|foil', "rarity": f'{c.get("rarity") or ""} · foil'.strip(" ·"),
+                    "price": _num(prices.get("eur_foil"))})
+    return out
+
+
+def _mtg_search(q):
+    r = get_with_retry("https://api.scryfall.com/cards/search", "Scryfall", headers=SCRYFALL_HEADERS,
+                       params={"q": q, "unique": "prints", "order": "released", "dir": "desc"})
+    if r.status_code == 404:  # « aucune carte » chez Scryfall
+        return []
+    r.raise_for_status()
+    return r.json().get("data", [])
+
+
+def _mtg_get(path):
+    r = get_with_retry(f"https://api.scryfall.com{path}", "Scryfall", headers=SCRYFALL_HEADERS)
+    if r.status_code == 404:
+        return None
+    r.raise_for_status()
+    return r.json()
+
+
+def fetch_magic(name=None, number=None, api_id=None):
+    if api_id:
+        c = _mtg_get(f"/cards/{api_id.split('|')[0]}")
+        return [e for e in _mtg_entries(c) if e["api_id"] == api_id] if c else []
+
+    # « MKM 123 », « mkm-123 », « MKM/123a » : extension + numéro de collection identifient la carte
+    m = re.match(r"^\s*([A-Za-z0-9]{2,6})[\s\-/#•.]+([0-9]+[a-z★]?)\s*$", number or "")
+    if m:
+        c = _mtg_get(f"/cards/{m.group(1).lower()}/{m.group(2)}")
+        if c:
+            return _mtg_entries(c)
+
+    name = (name or "").replace('"', "").strip()
+    if len(name) < 2:
+        return []
+    # 1) nom français (impressions françaises) ; les prix ne sont relevés que sur les impressions anglaises
+    fr_names = {}
+    try:
+        for c in _mtg_search(f'"{name}" lang:fr game:paper')[:40]:
+            fr_names.setdefault(c.get("name"), c.get("printed_name") or c.get("name"))
+    except (SourceError, requests.RequestException):
+        pass
+    if fr_names:
+        wanted = list(fr_names)[:4]
+        cards = _mtg_search("(" + " or ".join(f'!"{n}"' for n in wanted) + ") game:paper")
+    else:
+        # 2) nom anglais ; puis seulement son début (faute de lecture en fin de mot)
+        cards = []
+        for cut in (len(name), max(4, len(name) - 2)):
+            cards = _mtg_search(f'"{name[:cut]}" game:paper')
+            if cards:
+                break
+    entries = []
+    for c in cards[:30]:
+        entries.extend(_mtg_entries(c, fr_names.get(c.get("name"))))
+    return entries[:60]
+
+
+# ----------------------------------------------------------------- One Piece Card Game (optcgapi.com)
+# Pas de source gratuite avec les prix Cardmarket : optcgapi.com donne le prix TCGplayer (marché américain, en
+# dollars), converti ici en euros au taux du jour (BCE via frankfurter). C'est une estimation, l'appli le signale.
+OPTCG = "https://optcgapi.com/api"
+_op_cache = {"at": 0.0, "cards": []}
+_fx_cache = {"day": None, "rate": None}
+USD_EUR_FALLBACK = 0.9
+
+
+def usd_to_eur_rate():
+    today = date.today().isoformat()
+    if _fx_cache["day"] != today:
+        try:
+            r = requests.get("https://api.frankfurter.dev/v1/latest", params={"from": "USD", "to": "EUR"},
+                             timeout=HTTP_TIMEOUT)
+            r.raise_for_status()
+            _fx_cache.update(day=today, rate=float(r.json()["rates"]["EUR"]))
+        except (requests.RequestException, ValueError, KeyError):
+            app.logger.warning("taux USD/EUR indisponible, on garde le dernier connu")
+    return _fx_cache["rate"] or USD_EUR_FALLBACK
+
+
+def _op_entry(c, rate):
+    usd = _num(c.get("market_price")) or _num(c.get("inventory_price"))
+    return {
+        "game": "onepiece",
+        "api_id": c.get("card_image_id") or c.get("card_set_id"),
+        "name": c.get("card_name", "?"),
+        "set_name": c.get("set_name"),
+        "number": c.get("card_set_id"),
+        "rarity": c.get("rarity"),
+        "image": c.get("card_image"),
+        "price": round(usd * rate, 2) if usd is not None else None,
+        "avg7": None,
+        "avg30": None,
+        "src_date": c.get("date_scraped"),
+        "price_source": "tcgplayer",
+    }
+
+
+def _op_endpoints(code):
+    """Les decks de démarrage (ST…) et les promos (P-…) ont leurs propres routes chez optcgapi."""
+    code = code.upper()
+    if code.startswith("ST"):
+        return [f"{OPTCG}/decks/card/{code}/"]
+    if code.startswith("P-"):
+        return [f"{OPTCG}/promos/card/{code}/"]
+    return [f"{OPTCG}/sets/card/{code}/", f"{OPTCG}/decks/card/{code}/"]
+
+
+def _op_by_code(code):
+    for url in _op_endpoints(code):
+        r = get_with_retry(url, "optcgapi.com")
+        if r.status_code == 200:
+            data = r.json()
+            data = data if isinstance(data, list) else [data]
+            if data and isinstance(data[0], dict) and data[0].get("card_set_id"):
+                return data
+    return []
+
+
+def _op_all_cards():
+    """Liste complète des cartes (≈ quelques milliers), gardée 12 h en mémoire : optcgapi n'a pas de recherche par nom."""
+    if _op_cache["cards"] and time.time() - _op_cache["at"] < 12 * 3600:
+        return _op_cache["cards"]
+    cards = []
+    for path in ("allSetCards", "allSTCards", "allPromoCards"):
+        r = get_with_retry(f"{OPTCG}/{path}/", "optcgapi.com")
+        if r.status_code == 200:
+            cards.extend(c for c in r.json() if isinstance(c, dict))
+    if cards:
+        _op_cache.update(at=time.time(), cards=cards)
+    return cards or _op_cache["cards"]
+
+
+def _op_code(text):
+    """« OP01-001 », « op01 001 », « ST10-005 », « P-012 » ; les lectures « 0P01-0O1 » sont corrigées."""
+    t = re.sub(r"\s+", "", (text or "").upper()).replace("_", "-")
+    m = re.match(r"^([A-Z0O]{1,3}[0-9OIL]{0,2})-?([0-9OIL]{3})$", t)
+    if not m:
+        return None
+    prefix, num = m.group(1), m.group(2)
+    fix = str.maketrans("OIL", "011")
+    head = re.match(r"^([A-Z0]+?)([0-9OIL]*)$", prefix)
+    letters = head.group(1).replace("0", "O") if head else prefix
+    digits = (head.group(2) if head else "").translate(fix)
+    return f"{letters}{digits}-{num.translate(fix)}" if letters != "P" else f"P-{num.translate(fix)}"
+
+
+def fetch_onepiece(name=None, number=None, api_id=None):
+    rate = usd_to_eur_rate()
+    if api_id:
+        code = api_id.split("_")[0]
+        return [_op_entry(c, rate) for c in _op_by_code(code) if (c.get("card_image_id") or c.get("card_set_id")) == api_id]
+    code = _op_code(number)
+    if code:
+        found = _op_by_code(code)
+        if found:
+            return [_op_entry(c, rate) for c in found]
+    wanted = _norm(name)
+    if len(wanted) < 3:
+        return []
+    cards = _op_all_cards()
+    hits = [c for c in cards if wanted in _norm(c.get("card_name"))]
+    if not hits and len(wanted) > 5:  # faute de lecture en fin de nom
+        hits = [c for c in cards if wanted[:-2] in _norm(c.get("card_name"))]
+    hits.sort(key=lambda c: (c.get("card_set_id") or ""), reverse=True)
+    return [_op_entry(c, rate) for c in hits[:60]]
+
+
+FETCHERS = {"pokemon": fetch_pokemon, "yugioh": fetch_yugioh, "magic": fetch_magic, "onepiece": fetch_onepiece}
 
 
 # ----------------------------------------------------------------- prix & variations

@@ -43,9 +43,10 @@ nav button.on{color:var(--accent)}
 .toolbar{display:grid;gap:8px;margin-bottom:10px}
 .toolbar input,.toolbar select,.field input,.field select,#login input{width:100%;padding:11px 12px;border-radius:10px;
   border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit}
-.seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:10px}
+.seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow-x:auto;scrollbar-width:none;margin-bottom:10px}
+.seg::-webkit-scrollbar{display:none}
 .toolbar .seg{margin-bottom:0}
-.seg button{flex:1;background:none;border:0;color:var(--muted);padding:10px 4px;font:inherit}
+.seg button{flex:1 0 auto;background:none;border:0;color:var(--muted);padding:10px 10px;font:inherit;white-space:nowrap}
 .seg button.on{background:var(--holo);color:var(--on-accent);font-weight:600}
 
 .list{display:grid;gap:8px}

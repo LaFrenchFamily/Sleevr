@@ -4,12 +4,14 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const eur = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 const money = (v) => (v == null ? "—" : eur.format(v));
 /** Date du prix chez Cardmarket : si elle est ancienne, on le dit (la source ne met pas tout à jour chaque jour). */
-function priceNote(d) {
+function priceNote(d, game) {
+  // One Piece : pas de prix Cardmarket gratuit, on affiche le prix TCGplayer (USD) converti en euros
+  const src = game === "onepiece" ? "Prix TCGplayer converti en €, estimation" : "Prix Cardmarket";
   const t = d ? new Date(d) : null;
-  if (!t || isNaN(t)) return "";
+  if (!t || isNaN(t)) return game === "onepiece" ? `<div class="small muted">${src}</div>` : "";
   const days = Math.floor((Date.now() - t) / 864e5);
   const old = days > 14;
-  return `<div class="small ${old ? "" : "muted"}" ${old ? 'style="color:var(--accent)"' : ""}>Prix Cardmarket du ${t.toLocaleDateString("fr-FR")}` +
+  return `<div class="small ${old ? "" : "muted"}" ${old ? 'style="color:var(--accent)"' : ""}>${src} du ${t.toLocaleDateString("fr-FR")}` +
     `${old ? ` — ancien (${days} j) : la source ne l'a pas actualisé` : ""}</div>`;
 }
 /** Saisie d'un prix à la main : « 12,50 », « 12.5 », « 12,50 € ». Renvoie un nombre >= 0, ou null si vide / invalide. */
@@ -45,7 +47,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const CONDITIONS = [["MT", "Mint"], ["NM", "Near Mint"], ["EX", "Excellent"], ["GD", "Good"], ["LP", "Light Played"], ["PL", "Played"], ["PO", "Poor"]];
 /** Nom à afficher : français si on le connaît (Pokémon), sinon celui de la base. */
 const dn = (x) => x.name_fr || x.name;
-const GAME_LABEL = { pokemon: "Pokémon", yugioh: "Yu-Gi-Oh!" };
+const GAME_LABEL = { pokemon: "Pokémon", yugioh: "Yu-Gi-Oh!", magic: "Magic", onepiece: "One Piece" };
 
 let items = [];
 let addGame = "pokemon";
@@ -269,7 +271,7 @@ async function openCard(id) {
         <h2 style="margin:0 0 4px">${esc(dn(it))}</h2>
         <div class="muted small">${esc(GAME_LABEL[it.game])} · ${esc(it.set_name || "")}<br>${esc(it.number || "")} ${esc(it.rarity || "")}</div>
         <div style="margin-top:8px"><b>${money(it.price)}</b> <span class="muted small">l'unité</span>${it.use_custom ? ` <span class="badge">perso</span>` : ""}</div>
-        ${it.use_custom ? `<div class="muted small">Ton prix (pas de variation)</div>` : priceNote(it.src_date)}
+        ${it.use_custom ? `<div class="muted small">Ton prix (pas de variation)</div>` : priceNote(it.src_date, it.game)}
         ${it.use_custom ? "" : `<div class="vars" style="margin-top:6px">${varBadge("1 j", it.var1)}${varBadge("7 j", it.var7)}${varBadge("30 j", it.var30)}</div>`}
       </div>
     </div>
@@ -401,7 +403,7 @@ $("#results").addEventListener("click", (e) => {
         <h2 style="margin:0 0 4px">${esc(dn(c))}</h2>
         <div class="muted small">${esc(c.set_name || "")}<br>${esc(c.number || "")} ${esc(c.rarity || "")}</div>
         <div style="margin-top:8px"><b>${money(c.price)}</b></div>
-        ${priceNote(c.src_date)}
+        ${priceNote(c.src_date, c.game)}
       </div>
     </div>
     <div class="row">
@@ -631,6 +633,27 @@ function guessNumber(text, game) {
     }
     return "";
   }
+  if (game === "onepiece") {
+    // ex. OP01-001, ST10-005, EB01-012, P-012 (le 0 et le O se confondent souvent)
+    const re = /(?:^|[^A-Z0-9])((?:[O0]P|ST|EB|PRB)[0-9OIl]{2}|P)\s?-\s?([0-9OIlLSBZ]{3})(?![0-9A-Za-z])/g;
+    for (const m of t.toUpperCase().matchAll(re)) {
+      const head = m[1].replace(/^0P/, "OP").replace(/(?<=^(?:OP|ST|EB|PRB))[0-9OIL]+/, (x) => fixDigits(x));
+      const digits = fixDigits(m[2]);
+      if (/^\d{3}$/.test(digits)) return `${head}-${digits}`;
+    }
+    return "";
+  }
+  if (game === "magic") {
+    // cadre moderne : « 0123 R » puis « MKM • FR » ; cadre 2015-2022 : « 123/280 R » puis « MKM • FR »
+    const up = t.toUpperCase();
+    const num = up.match(/(?:^|[^0-9])([0-9OIlSB]{1,4})(?:\s*\/\s*[0-9OIlSB]{1,4})?\s+[CURMSLT](?![A-Z0-9])/);
+    const set = up.match(/(?:^|[^A-Z0-9])([A-Z0-9]{3,5})\s*[•·*.\-]\s*(?:EN|FR|DE|IT|ES|JA|PT)(?![A-Z])/);
+    if (num && set) {
+      const n = fixDigits(num[1]).replace(/^0+(?=\d)/, "");
+      if (/^\d+$/.test(n)) return `${set[1]} ${n}`;
+    }
+    return "";
+  }
   // Pokémon : 58/102 (le « / » est parfois lu « | » ou « \ »)
   const re = /(?:^|[^0-9A-Za-z])([0-9OoIlSB]{1,3})\s*[\/\\|]\s*([0-9OoIlSB]{2,3})(?![0-9A-Za-z])/g;
   for (const m of t.matchAll(re)) {
@@ -692,7 +715,11 @@ async function readCard(img, game, onStep) {
   onStep("Lecture du numéro…");
   let number = "";
   // Pokémon : numéro en bas de carte. Yu-Gi-Oh! : code sous l'illustration (parfois en bas).
-  const zones = game === "yugioh" ? [[0.5, 0.82], [0.8, 1]] : [[0.8, 1], [0.7, 1]];
+  const zones = {
+    yugioh: [[0.5, 0.82], [0.8, 1]],
+    magic: [[0.88, 1], [0.8, 1]], // bas à gauche : numéro, rareté, extension
+    onepiece: [[0.86, 1], [0.78, 1]], // bas à droite : OP01-001
+  }[game] || [[0.8, 1], [0.7, 1]];
   for (const [a, b] of zones) {
     const r = await worker.recognize(zone(a, b));
     raw.push(`[${Math.round(a * 100)}-${Math.round(b * 100)} % de la carte] ` + r.data.text.trim());

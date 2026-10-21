@@ -8,7 +8,7 @@ connaître leur valeur (prix Cardmarket, en euros) et suivre les variations à 1
 - **Prix** : relevé automatique chaque jour (à 6 h par défaut) → historique à toi, courbe par carte.
 - **Export CSV** de la collection.
 
-Sources : [pokemontcg.io](https://pokemontcg.io) (Pokémon) et [YGOPRODeck](https://ygoprodeck.com/api-guide/) (Yu-Gi-Oh!), gratuites.
+Sources, toutes gratuites : [pokemontcg.io](https://pokemontcg.io) (Pokémon), [YGOPRODeck](https://ygoprodeck.com/api-guide/) (Yu-Gi-Oh!), [Scryfall](https://scryfall.com/docs/api) (Magic) et [optcgapi.com](https://optcgapi.com) (One Piece).
 
 ## Option A — Sur ton PC Windows (le plus simple pour commencer)
 
@@ -40,7 +40,16 @@ Les données sont dans le dossier `data/` (une seule base `cartes.db`) : sauvega
 - **Fautes de lecture** : si le nom lu est un peu faux (« Pikachi »), la recherche retente avec le début du nom.
 - **Photos recto / verso de TES cartes** : à l'ajout, et dans la fiche d'une carte (« Photos de ta carte »), tu peux photographier le recto et le verso de ton exemplaire pour garder une trace de son état. À l'ajout, la photo du scan est proposée comme recto (tu peux la retirer avec ✕). Dans la fiche, touche une miniature pour l'agrandir, la reprendre ou la supprimer. Les photos sont réduites (environ 0,2 à 0,5 Mo chacune) et rangées dans `data/photos/`, donc comprises dans la sauvegarde du dossier `data`. Une photo est rattachée à une ligne de la collection (une carte dans un état donné) : deux exemplaires dans des états différents ont chacun leurs photos, trois exemplaires dans le même état partagent les leurs. Supprimer la carte supprime ses photos.
 - **Ton propre prix** : dans la fiche d'une carte (et au moment de l'ajout), l'interrupteur « Utiliser mon propre prix » te laisse saisir le prix que tu veux (ex. 12,50). Tant qu'il est allumé, ce prix remplace celui du marché dans la liste, le total de la collection et l'export CSV (colonne « Prix » : perso / marché), et la carte affiche « perso » sans variations. Éteins l'interrupteur pour revenir au prix du marché : ton prix reste mémorisé. Le réglage est propre à chaque ligne (carte + état) et le relevé quotidien ne l'écrase jamais. Le prix du marché continue d'être relevé en arrière-plan.
+- **Magic** : prix Cardmarket via Scryfall, une ligne pour la version normale et une pour la foil. La recherche accepte le nom français (« Foudre ») ou anglais, et le code « extension + numéro » (ex. MKM 123), lu en bas à gauche de la carte.
+- **One Piece** : aucune source gratuite ne donne le prix Cardmarket. L'appli utilise le prix TCGplayer (marché américain, en dollars) converti en euros au taux BCE du jour : c'est une estimation, signalée dans la fiche. Les noms sont en anglais ; le plus fiable est le code (ex. OP01-001).
 - Clé API Pokémon gratuite (facultative) : https://dev.pokemontcg.io → à mettre dans `POKEMONTCG_API_KEY`.
+
+## Tests
+
+```bash
+pip install -r requirements.txt pytest
+python -m pytest -q tests
+```
 
 ## Fichiers
 
