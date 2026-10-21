@@ -46,10 +46,11 @@ nav button.on{color:var(--accent)}
 .seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow-x:auto;scrollbar-width:none;margin-bottom:10px}
 .seg::-webkit-scrollbar{display:none}
 .toolbar .seg{margin-bottom:0}
+.toolbar .seg button,#add-game button{padding:10px 6px;font-size:.88rem;letter-spacing:-.01em}
 .seg button{flex:1 0 auto;background:none;border:0;color:var(--muted);padding:10px 10px;font:inherit;white-space:nowrap}
 .seg button.on{background:var(--holo);color:var(--on-accent);font-weight:600}
 
-.list{display:grid;gap:8px}
+.list{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
 .item{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px;cursor:pointer}
 .item img{width:52px;height:72px;object-fit:cover;border-radius:5px;background:var(--panel2);flex:none}
 .item .noimg{width:52px;height:72px;border-radius:5px;background:var(--panel2);flex:none}
