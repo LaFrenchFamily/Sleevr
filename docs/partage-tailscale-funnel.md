@@ -30,7 +30,7 @@ Dans la console Tailscale (https://login.tailscale.com/admin) :
 Copie `.env.example` en `.env`, puis remplis :
 
 ```
-SIGNUP_CODE=un-code-que-tu-donneras-a-tes-amis
+SIGNUP_CODE=                  (facultatif : laisse vide pour que chacun puisse s'inscrire librement)
 SECRET_KEY=une-longue-chaine-aleatoire-a-ne-jamais-changer
 TS_AUTHKEY=tskey-auth-...la-cle-copiee...
 ANTHROPIC_API_KEY=            (facultatif : reconnaissance des cartes par l'IA)
@@ -45,7 +45,7 @@ Double-clique sur **`partager-tailscale.bat`** (ou : `docker compose -f docker-c
 
 - Dans la console Tailscale, page **Machines**, une machine `holocarte` apparaît, avec un badge **Funnel**.
 - Sur ton PC : http://localhost:8000
-- Pour tes amis : `https://holocarte.ton-reseau.ts.net`, avec le code d'invitation pour créer leur compte.
+- Pour tes amis : `https://holocarte.ton-reseau.ts.net`, en créant leur compte (avec le code d'invitation si tu en as mis un).
   Le tout premier chargement peut prendre une dizaine de secondes, le temps que le certificat HTTPS soit créé.
 
 Ensuite tout redémarre seul avec Docker Desktop, et l'adresse ne change jamais : l'identité de la machine est

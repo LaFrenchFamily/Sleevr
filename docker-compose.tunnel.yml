@@ -6,7 +6,7 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      SIGNUP_CODE: ${SIGNUP_CODE:?définis SIGNUP_CODE dans le fichier .env (code d'invitation)}
+      SIGNUP_CODE: ${SIGNUP_CODE:-}            # vide = inscription libre
       SECRET_KEY: ${SECRET_KEY:?définis SECRET_KEY dans le fichier .env}
       POKEMONTCG_API_KEY: ${POKEMONTCG_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

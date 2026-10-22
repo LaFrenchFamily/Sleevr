@@ -39,7 +39,7 @@ Docker Desktop + un tunnel Cloudflare : tes amis accèdent à l'appli en HTTPS s
 
 ## Comptes et collectionneurs
 
-- Chacun crée son compte (pseudo + mot de passe) avec le **code d'invitation** (`SIGNUP_CODE`) et a **sa propre collection**.
+- Chacun crée son compte (pseudo + mot de passe) et a **sa propre collection**. Si `SIGNUP_CODE` est rempli, ce **code d'invitation** est demandé à l'inscription ; vide, l'inscription est libre.
 - L'onglet **Collectionneurs** montre les collections des autres membres (valeur, cartes, photos), en lecture seule. Les notes restent privées. Dans « Mon compte » (bouton rond en haut), tu peux rendre ta collection privée.
 - **Mise à jour d'une ancienne installation** : la collection existante est rattachée automatiquement au **premier compte créé**. Si tu avais `APP_PASSWORD`, il sert de code d'invitation tant que `SIGNUP_CODE` n'est pas défini.
 - Le relevé quotidien des prix est commun à tous : une carte présente dans plusieurs collections n'est relevée qu'une fois.

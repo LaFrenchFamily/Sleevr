@@ -32,7 +32,7 @@ permet d'installer l'appli sur l'écran d'accueil du téléphone).
 Dans le dossier du projet, copie `.env.example` en `.env`, puis remplis :
 
 ```
-SIGNUP_CODE=un-code-que-tu-donneras-a-tes-amis
+SIGNUP_CODE=                  (facultatif : laisse vide pour que chacun puisse s'inscrire librement)
 SECRET_KEY=une-longue-chaine-aleatoire-a-ne-jamais-changer
 CLOUDFLARE_TUNNEL_TOKEN=eyJ...le-jeton-copie-a-l-etape-1...
 ANTHROPIC_API_KEY=            (facultatif : reconnaissance des cartes par l'IA)
@@ -48,7 +48,7 @@ La collection ira au premier compte créé : crée le tien avant d'inviter qui q
 Double-clique sur **`partager.bat`** (ou, dans un terminal : `docker compose -f docker-compose.tunnel.yml up -d --build`).
 
 - Sur ton PC : http://localhost:8000
-- Pour tes amis : `https://holocarte.ton-domaine.fr`, avec le code d'invitation pour créer leur compte.
+- Pour tes amis : `https://holocarte.ton-domaine.fr`, en créant leur compte (avec le code d'invitation si tu en as mis un).
 
 Ensuite, tout redémarre seul : Docker Desktop se lance à l'ouverture de ta session Windows, et les conteneurs
 (`restart: unless-stopped`) repartent avec lui. Le tunnel se reconnecte tout seul après une coupure de la box.
