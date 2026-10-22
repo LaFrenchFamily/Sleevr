@@ -1,7 +1,7 @@
-# Partager Sleevr depuis ton PC (Docker Desktop + Cloudflare Tunnel)
+# Partager Holocarte depuis ton PC (Docker Desktop + Cloudflare Tunnel)
 
-Sleevr tourne sur ton PC dans Docker Desktop, et un tunnel Cloudflare le rend accessible à tes amis sur
-`https://sleevr.ton-domaine.fr`. Tu n'as aucun port à ouvrir sur ta box, et l'HTTPS est fourni par Cloudflare (ce qui
+Holocarte tourne sur ton PC dans Docker Desktop, et un tunnel Cloudflare le rend accessible à tes amis sur
+`https://holocarte.ton-domaine.fr`. Tu n'as aucun port à ouvrir sur ta box, et l'HTTPS est fourni par Cloudflare (ce qui
 permet d'installer l'appli sur l'écran d'accueil du téléphone).
 
 **Où sont les données ?** Dans le dossier `data/` à côté de ce projet, sur ton disque : la base `cartes.db`
@@ -19,12 +19,12 @@ permet d'installer l'appli sur l'écran d'accueil du téléphone).
 
 1. Dans le tableau de bord Cloudflare, ouvre **Tunnels** (selon la version de l'interface : *Networking → Tunnels*
    ou *Zero Trust → Networks → Tunnels*) et clique **Create a tunnel**.
-2. Type **Cloudflared**, nom : `sleevr`.
+2. Type **Cloudflared**, nom : `holocarte`.
 3. Sur l'écran d'installation, choisis **Docker**. La commande affichée contient un long jeton qui commence par
    `eyJ…` : copie uniquement ce jeton. C'est un mot de passe, ne le partage pas.
 4. Ajoute la route publique (onglet **Public Hostname**, ou **Routes → Add route → Published application**) :
-   - Sous-domaine : `sleevr`, domaine : le tien.
-   - Service : type **HTTP**, URL **`sleevr:8000`** (c'est le nom du conteneur, pas `localhost`).
+   - Sous-domaine : `holocarte`, domaine : le tien.
+   - Service : type **HTTP**, URL **`sleevr:8000`** (c'est le nom du service dans `docker-compose.tunnel.yml`, gardé tel quel, pas `localhost`).
 5. Enregistre. Cloudflare crée l'enregistrement DNS tout seul.
 
 ## 2. Préparer le projet (une seule fois)
@@ -48,14 +48,14 @@ La collection ira au premier compte créé : crée le tien avant d'inviter qui q
 Double-clique sur **`partager.bat`** (ou, dans un terminal : `docker compose -f docker-compose.tunnel.yml up -d --build`).
 
 - Sur ton PC : http://localhost:8000
-- Pour tes amis : `https://sleevr.ton-domaine.fr`, avec le code d'invitation pour créer leur compte.
+- Pour tes amis : `https://holocarte.ton-domaine.fr`, avec le code d'invitation pour créer leur compte.
 
 Ensuite, tout redémarre seul : Docker Desktop se lance à l'ouverture de ta session Windows, et les conteneurs
 (`restart: unless-stopped`) repartent avec lui. Le tunnel se reconnecte tout seul après une coupure de la box.
 
 ## Au quotidien
 
-- **Mettre à jour Sleevr** : récupère la nouvelle version du code (`git pull`), puis relance `partager.bat`.
+- **Mettre à jour Holocarte** : récupère la nouvelle version du code (`git pull`), puis relance `partager.bat`.
   Le dossier `data/` n'est jamais touché.
 - **Arrêter le partage** : `docker compose -f docker-compose.tunnel.yml down` (les données restent).
 - **Sauvegarder ailleurs** : `data/backups/` protège contre une erreur dans l'appli, pas contre une panne de disque.

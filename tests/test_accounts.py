@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-import app as sleevr
+import app as holocarte
 
 CARD = {"game": "pokemon", "api_id": "base1-4", "name": "Charizard", "set_name": "Base", "number": "4/102",
         "price": 300.0}
@@ -11,12 +11,12 @@ CARD = {"game": "pokemon", "api_id": "base1-4", "name": "Charizard", "set_name":
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(sleevr, "DB_PATH", str(tmp_path / "cartes.db"))
-    monkeypatch.setattr(sleevr, "PHOTO_DIR", str(tmp_path))
-    monkeypatch.setattr(sleevr, "SIGNUP_CODE", "invite")
-    sleevr.init_db()
-    sleevr.app.config["TESTING"] = True
-    return sleevr.app.test_client
+    monkeypatch.setattr(holocarte, "DB_PATH", str(tmp_path / "cartes.db"))
+    monkeypatch.setattr(holocarte, "PHOTO_DIR", str(tmp_path))
+    monkeypatch.setattr(holocarte, "SIGNUP_CODE", "invite")
+    holocarte.init_db()
+    holocarte.app.config["TESTING"] = True
+    return holocarte.app.test_client
 
 
 def signup(c, name, code="invite"):
@@ -76,10 +76,10 @@ def test_old_database_goes_to_first_account(tmp_path, monkeypatch):
     """)
     db.commit()
     db.close()
-    monkeypatch.setattr(sleevr, "DB_PATH", str(db_path))
-    monkeypatch.setattr(sleevr, "SIGNUP_CODE", "")
-    sleevr.init_db()
-    first, second = sleevr.app.test_client(), sleevr.app.test_client()
+    monkeypatch.setattr(holocarte, "DB_PATH", str(db_path))
+    monkeypatch.setattr(holocarte, "SIGNUP_CODE", "")
+    holocarte.init_db()
+    first, second = holocarte.app.test_client(), holocarte.app.test_client()
     signup(first, "alex")
     signup(second, "sam")
     assert first.get("/api/collection").get_json()["items"][0]["quantity"] == 3
@@ -87,13 +87,13 @@ def test_old_database_goes_to_first_account(tmp_path, monkeypatch):
 
 
 def test_daily_backup_keeps_the_latest(tmp_path, monkeypatch):
-    monkeypatch.setattr(sleevr, "DB_PATH", str(tmp_path / "cartes.db"))
-    monkeypatch.setattr(sleevr, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(sleevr, "BACKUP_KEEP", 2)
-    sleevr.init_db()
+    monkeypatch.setattr(holocarte, "DB_PATH", str(tmp_path / "cartes.db"))
+    monkeypatch.setattr(holocarte, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(holocarte, "BACKUP_KEEP", 2)
+    holocarte.init_db()
     for day in ("2026-10-01", "2026-10-02", "2026-10-03"):
-        assert sleevr.backup_db(day)
-    assert sleevr.backup_db("2026-10-03") is None  # déjà faite aujourd'hui
+        assert holocarte.backup_db(day)
+    assert holocarte.backup_db("2026-10-03") is None  # déjà faite aujourd'hui
     kept = sorted(p.name for p in (tmp_path / "backups").iterdir())
     assert kept == ["cartes-2026-10-02.db", "cartes-2026-10-03.db"]
     db = sqlite3.connect(tmp_path / "backups" / "cartes-2026-10-03.db")

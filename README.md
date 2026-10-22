@@ -1,4 +1,4 @@
-# Sleevr — ta collection de cartes
+# Holocarte — ta collection de cartes
 
 Appli web (installable sur le téléphone) pour enregistrer tes cartes en les photographiant,
 connaître leur valeur (prix Cardmarket, en euros) et suivre les variations à 1, 7 et 30 jours.

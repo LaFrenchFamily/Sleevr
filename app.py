@@ -1,4 +1,4 @@
-"""Sleevr — serveur Flask + SQLite.
+"""Holocarte — serveur Flask + SQLite.
 
 Pokémon (TCGdex), Yu-Gi-Oh! (YGOPRODeck), Magic (Scryfall) : prix Cardmarket en EUR ;
 One Piece (optcgapi.com) : prix TCGplayer converti en EUR.
@@ -669,7 +669,7 @@ def fetch_yugioh(name=None, number=None, api_id=None):
 
 # ----------------------------------------------------------------- Magic: The Gathering (Scryfall)
 # Scryfall demande un User-Agent et un Accept explicites, et au plus ~10 requêtes/s.
-SCRYFALL_HEADERS = {"User-Agent": "Sleevr/1.0", "Accept": "application/json"}
+SCRYFALL_HEADERS = {"User-Agent": "Holocarte/1.0", "Accept": "application/json"}
 
 
 def _mtg_image(c):
@@ -1425,7 +1425,7 @@ def export_csv():
     return app.response_class(
         "﻿" + buf.getvalue(),
         mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=sleevr-collection.csv"},
+        headers={"Content-Disposition": "attachment; filename=holocarte-collection.csv"},
     )
 
 

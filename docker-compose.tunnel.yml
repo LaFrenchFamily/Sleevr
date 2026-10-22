@@ -1,8 +1,8 @@
-# Sleevr sur Docker Desktop (ton PC), partagé sur Internet par un tunnel Cloudflare.
+# Holocarte sur Docker Desktop (ton PC), partagé sur Internet par un tunnel Cloudflare.
 # Pas de port à ouvrir sur la box, HTTPS fourni par Cloudflare. Guide : docs/partage-docker-desktop.md
 #   docker compose -f docker-compose.tunnel.yml up -d --build
 services:
-  sleevr:
+  sleevr:              # nom technique gardé : la route Cloudflare pointe vers sleevr:8000
     build: .
     restart: unless-stopped
     environment:

@@ -1,5 +1,5 @@
 :root{
-  /* Sleevr : encre profonde + accent « holo » (violet → turquoise), comme le reflet d'une sleeve */
+  /* Holocarte : encre profonde + accent « holo » (violet → turquoise), comme le reflet d'une sleeve */
   --bg:#0e1020; --panel:#171a2e; --panel2:#21253d; --line:#2c3150;
   --text:#eef0fa; --muted:#8f95b2; --accent:#8c7bff; --accent2:#3fd7c9; --on-accent:#fff;
   --holo:linear-gradient(120deg,#8c7bff 0%,#5aa8ff 50%,#3fd7c9 100%);

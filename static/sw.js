@@ -1,6 +1,6 @@
 // Service worker minimal : permet l'installation sur l'écran d'accueil.
 // Les données (/api) ne sont jamais mises en cache : les prix doivent toujours être frais.
-const CACHE = "sleevr-v2";
+const CACHE = "holocarte-v1";
 const SHELL = ["/", "style.css", "app.js", "icon.svg", "manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {
