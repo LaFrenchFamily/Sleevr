@@ -108,3 +108,45 @@ def test_onepiece_name_search_uses_cached_list(http):
                                       ("P-012", "P-012"), ("EB01-012", "EB01-012"), ("Luffy", None)])
 def test_onepiece_code_parsing(raw, code):
     assert sleevr._op_code(raw) == code
+
+
+DRACO = {"id": "base1-4", "localId": "4", "name": "Dracaufeu", "rarity": "Rare", "image": "https://assets.tcgdex.net/fr/base/base1/4",
+         "set": {"id": "base1", "name": "Set de Base", "cardCount": {"official": 102, "total": 102}},
+         "variants": {"normal": False, "holo": True},
+         "pricing": {"cardmarket": {"unit": "EUR", "updated": "2026-10-21T02:00:00Z", "trend": 1.0,
+                                    "trend-holo": 420.0, "avg7-holo": 400.0, "avg30-holo": 380.0}}}
+
+
+def test_pokemon_tcgdex_french_name_and_holo_price(http):
+    routes, calls = http
+
+    def cards(url, params):
+        if "/fr/cards/base1-4" in url:
+            return FakeResponse(200, DRACO)
+        assert "/fr/cards" in url and params["name"] == "Dracaufeu"
+        return FakeResponse(200, [{"id": "base1-4", "localId": "4", "name": "Dracaufeu"}])
+
+    routes["tcgdex.net/v2/fr/cards"] = cards
+    res = sleevr.fetch_pokemon(name="Dracaufeu")
+    assert res[0]["name"] == "Dracaufeu" and res[0]["number"] == "4/102"
+    assert res[0]["price"] == 420.0 and res[0]["avg7"] == 400.0  # carte holo uniquement : prix holo
+    assert res[0]["image"].endswith("/low.webp") and res[0]["src_date"] == "2026-10-21"
+
+
+def test_pokemon_number_with_total(http):
+    routes, _ = http
+    routes["/en/sets"] = lambda u, p: FakeResponse(200, [{"id": "base1", "cardCount": {"official": 102}},
+                                                          {"id": "swsh3", "cardCount": {"official": 189}}])
+    routes["/fr/sets/base1/4"] = lambda u, p: FakeResponse(200, DRACO)
+    sleevr._tcgdex_sets.update(at=0.0, sets=[])
+    res = sleevr.fetch_pokemon(number="04/102")
+    assert [r["api_id"] for r in res] == ["base1-4"]
+
+
+def test_pokemon_refresh_falls_back_to_pokemontcg_io(http):
+    routes, _ = http
+    routes["api.pokemontcg.io/v2/cards/sv3pt5-6"] = lambda u, p: FakeResponse(200, {"data": {
+        "id": "sv3pt5-6", "name": "Charizard ex", "number": "6", "set": {"name": "151", "printedTotal": 165},
+        "cardmarket": {"prices": {"trendPrice": 12.5}}}})
+    res = sleevr.fetch_pokemon(api_id="sv3pt5-6")
+    assert res[0]["price"] == 12.5

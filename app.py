@@ -1,6 +1,6 @@
 """Sleevr — serveur Flask + SQLite.
 
-Pokémon (pokemontcg.io), Yu-Gi-Oh! (YGOPRODeck), Magic (Scryfall) : prix Cardmarket en EUR ;
+Pokémon (TCGdex), Yu-Gi-Oh! (YGOPRODeck), Magic (Scryfall) : prix Cardmarket en EUR ;
 One Piece (optcgapi.com) : prix TCGplayer converti en EUR.
 historique quotidien des prix et variations 1j / 7j / 30j.
 """
@@ -403,7 +403,7 @@ def pokemon_name_to_french(name):
 POKEMON_FIELDS = "id,name,number,rarity,set,images,cardmarket"
 
 
-def fetch_pokemon(name=None, number=None, api_id=None):
+def fetch_pokemon_ptcgio(name=None, number=None, api_id=None):
     headers = {"X-Api-Key": POKEMON_API_KEY} if POKEMON_API_KEY else {}
     src = "pokemontcg.io"
     if api_id:
@@ -452,6 +452,113 @@ def fetch_pokemon(name=None, number=None, api_id=None):
         wanted = {en_name.lower(), name.lower()}
         cards.sort(key=lambda c: 0 if any(w in c.get("name", "").lower() for w in wanted) else 1)  # noms proches en tête
     return [_pokemon_normalize(c) for c in cards]
+
+
+# ----------------------------------------------------------------- Pokémon : TCGdex (source principale)
+# TCGdex est gratuit, sans clé, connaît les noms français et donne les prix Cardmarket en euros.
+# pokemontcg.io ne sert plus que de repli, pour relever les cartes enregistrées avec un identifiant qu'il est seul à connaître.
+TCGDEX = "https://api.tcgdex.net/v2"
+_tcgdex_sets = {"at": 0.0, "sets": []}
+
+
+def _tcgdex_get(path, params=None, lang="fr"):
+    r = get_with_retry(f"{TCGDEX}/{lang}{path}", "TCGdex", params=params)
+    if r.status_code == 404:
+        return None
+    r.raise_for_status()
+    return r.json()
+
+
+def _tcgdex_normalize(c):
+    """Fiche TCGdex complète -> format commun. Carte uniquement holo/reverse : on prend le prix holo."""
+    cm = (c.get("pricing") or {}).get("cardmarket") or {}
+    variants = c.get("variants") or {}
+    holo_only = variants and not variants.get("normal", True)
+    sfx = "-holo" if holo_only and cm.get("trend-holo") is not None else ""
+    s = c.get("set") or {}
+    total = (s.get("cardCount") or {}).get("official")
+    img = c.get("image")
+    return {
+        "game": "pokemon",
+        "api_id": c["id"],
+        "name": c.get("name", "?"),
+        "set_name": s.get("name"),
+        "number": f'{c.get("localId", "")}/{total}' if total else c.get("localId"),
+        "rarity": c.get("rarity"),
+        "image": f"{img}/low.webp" if img else None,
+        "price": _num(cm.get("trend" + sfx)) or _num(cm.get("avg" + sfx)),
+        "avg7": _num(cm.get("avg7" + sfx)),
+        "avg30": _num(cm.get("avg30" + sfx)),
+        "src_date": (cm.get("updated") or "")[:10] or None,
+    }
+
+
+def _tcgdex_details(ids, lang="fr"):
+    """Fiches complètes en parallèle (la liste de recherche ne contient ni prix ni extension)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(cid):
+        try:
+            return _tcgdex_get(f"/cards/{cid}", lang=lang)
+        except (SourceError, requests.RequestException):
+            return None
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return [c for c in pool.map(one, ids) if c]
+
+
+def _tcgdex_sets_with_total(total):
+    if not _tcgdex_sets["sets"] or time.time() - _tcgdex_sets["at"] > 24 * 3600:
+        sets = _tcgdex_get("/sets", lang="en") or []
+        if sets:
+            _tcgdex_sets.update(at=time.time(), sets=sets)
+    return [s["id"] for s in _tcgdex_sets["sets"] if (s.get("cardCount") or {}).get("official") == total]
+
+
+def fetch_pokemon_tcgdex(name=None, number=None, api_id=None):
+    if api_id:
+        c = _tcgdex_get(f"/cards/{api_id}") or _tcgdex_get(f"/cards/{api_id}", lang="en")
+        return [_tcgdex_normalize(c)] if c else []
+
+    name = (name or "").strip()
+    num, _, total = (number or "").partition("/")
+    num, total = num.strip().lstrip("0") or num.strip(), total.strip()
+    if num.isdigit() and total.isdigit():
+        # « 58/102 » : les extensions de 102 cartes officielles, puis la carte n° 58 de chacune
+        set_ids = _tcgdex_sets_with_total(int(total))[:6]
+        cards = []
+        for sid in set_ids:
+            c = _tcgdex_get(f"/sets/{sid}/{num}") or _tcgdex_get(f"/sets/{sid}/{num}", lang="en")
+            if c:
+                cards.append(c)
+        if cards:
+            if name:  # le nom (souvent mal lu sur la photo) ne sert qu'à classer
+                n = _norm(name)
+                cards.sort(key=lambda c: 0 if n[:4] in _norm(c.get("name")) else 1)
+            return [_tcgdex_normalize(c) for c in cards]
+    if len(name) < 3:
+        return []
+
+    # nom français d'abord, puis anglais ; et en dernier recours le début du nom (faute de lecture en fin de mot)
+    brief, lang = [], "fr"
+    en_name = pokemon_name_to_english(name)
+    for lang, q in (("fr", name), ("en", en_name), ("fr", name[:max(4, len(name) - 2)])):
+        params = {"name": q, "pagination:page": 1, "pagination:itemsPerPage": 40}
+        brief = _tcgdex_get("/cards", params=params, lang=lang) or []
+        if num:
+            brief = [b for b in brief if (b.get("localId") or "").lstrip("0") == num] or brief
+        if brief:
+            break
+    cards = _tcgdex_details([b["id"] for b in brief[:24]], lang=lang)
+    cards.sort(key=lambda c: (c.get("set") or {}).get("id", ""), reverse=True)
+    return [_tcgdex_normalize(c) for c in cards]
+
+
+def fetch_pokemon(name=None, number=None, api_id=None):
+    if api_id:
+        res = fetch_pokemon_tcgdex(api_id=api_id)
+        return res or fetch_pokemon_ptcgio(api_id=api_id)  # carte enregistrée avec un identifiant pokemontcg.io
+    return fetch_pokemon_tcgdex(name=name, number=number)
 
 
 def _ygo_entries(c, display_name=None):
